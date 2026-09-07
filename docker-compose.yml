@@ -19,7 +19,11 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-evenements}:${POSTGRES_PASSWORD:-evenements}@db:5432/${POSTGRES_DB:-evenements}
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-evenements}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-evenements}
+      PGDATABASE: ${POSTGRES_DB:-evenements}
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:
