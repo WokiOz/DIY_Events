@@ -93,6 +93,10 @@ async function api(methode, url, corps) {
     options.body = JSON.stringify(corps);
   }
   const reponse = await fetch(url, options);
+  if (reponse.status === 401) {
+    afficherConnexion();
+    throw new Error('Session expirée, reconnectez-vous.');
+  }
   const donnees = await reponse.json().catch(() => null);
   if (!reponse.ok) throw new Error(donnees?.error || 'Erreur du serveur');
   return donnees;
@@ -101,6 +105,57 @@ const get = url => api('GET', url);
 const post = (url, corps) => api('POST', url, corps);
 const patch = (url, corps) => api('PATCH', url, corps);
 const supprimer = url => api('DELETE', url);
+
+/* ---------------------------------------------------------------- accès */
+
+async function connexion(nom, motDePasse) {
+  const reponse = await fetch('/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: nom, password: motDePasse })
+  });
+  const donnees = await reponse.json().catch(() => null);
+  if (!reponse.ok) throw new Error(donnees?.error || 'Connexion impossible');
+  return donnees;
+}
+
+function afficherConnexion() {
+  ecranMdp.hidden = true;
+  ecranConnexion.hidden = false;
+  document.getElementById('co-identifiant')?.focus();
+}
+
+function afficherEcranMdp() {
+  ecranConnexion.hidden = true;
+  ecranMdp.hidden = false;
+  document.getElementById('mdp-nouveau')?.focus();
+}
+
+function renderCompte() {
+  if (!state.user) { zoneCompte.hidden = true; return; }
+  zoneCompte.hidden = false;
+  zoneCompte.innerHTML = `
+    <span class="nom">${esc(state.user.username)}</span>
+    <span class="role">${estAdmin() ? 'Admin' : 'Lecture seule'}</span>
+    ${estAdmin() ? '<button class="icone" data-action="voir-comptes">Comptes</button>' : ''}
+    <button class="icone" data-action="deconnexion">Se déconnecter</button>`;
+}
+
+function appliquerModeLecture() {
+  if (estAdmin()) return;
+  document.querySelectorAll('#vue [data-action]').forEach(el => el.remove());
+  document.querySelectorAll('#vue input, #vue textarea, #vue select').forEach(el => {
+    if (el.type === 'checkbox' || el.type === 'radio') el.disabled = true;
+    else el.readOnly = true;
+  });
+}
+
+async function demarrerApplication() {
+  ecranConnexion.hidden = true;
+  ecranMdp.hidden = true;
+  renderCompte();
+  await rechargerOnglets();
+  route();
+}
 
 const argent = valeur => Number(valeur || 0).toLocaleString('fr-FR', {
   style: 'currency', currency: 'EUR', maximumFractionDigits: 2
@@ -116,8 +171,16 @@ const rail = document.getElementById('rail');
 const vue = document.getElementById('vue');
 const dialogue = document.getElementById('dialogue');
 const dialogueForm = document.getElementById('dialogue-form');
+const zoneCompte = document.getElementById('zone-compte');
+const ecranConnexion = document.getElementById('ecran-connexion');
+const formConnexion = document.getElementById('form-connexion');
+const erreurConnexion = document.getElementById('erreur-connexion');
+const ecranMdp = document.getElementById('ecran-mdp');
+const formMdp = document.getElementById('form-mdp');
+const erreurMdp = document.getElementById('erreur-mdp');
 
-const state = { tabs: [], event: null };
+const state = { tabs: [], event: null, user: null };
+const estAdmin = () => state.user?.role === 'admin';
 
 /* ------------------------------------------------------------- dialogue */
 
@@ -173,13 +236,16 @@ function choisirFichier(accept) {
 async function route() {
   const [, type, id] = (location.hash.slice(1) || '/').split('/');
   try {
+    if (type === 'comptes') return await viewComptes();
     if (type === 'theme') return await viewTheme(id);
     if (type === 'event') return await viewEvent(id);
     if (type === 'tab') return await viewTab(id);
     const premier = state.tabs[0];
     if (premier) return location.replace(`#/tab/${premier.id}`);
     renderTabs(null);
-    vue.innerHTML = vide('Créez un premier onglet pour commencer.');
+    vue.innerHTML = vide(estAdmin()
+      ? 'Créez un premier onglet pour commencer.'
+      : 'Aucun événement ne vous a été partagé pour l’instant.');
   } catch (erreur) {
     vue.innerHTML = vide(erreur.message);
   }
@@ -191,7 +257,7 @@ function renderTabs(actif) {
       ${onglet.image_url ? `<img src="${esc(onglet.image_url)}" alt="">` : ''}
       <span>${esc(onglet.name)}</span>
     </a>`).join('') +
-    '<button class="onglet ajout" data-action="onglet-ajouter">+ Nouvel onglet</button>';
+    (estAdmin() ? '<button class="onglet ajout" data-action="onglet-ajouter">+ Nouvel onglet</button>' : '');
 }
 
 async function rechargerOnglets() {
@@ -210,14 +276,15 @@ async function viewTab(id) {
         <h1>${esc(onglet?.name || 'Onglet')}</h1>
         <p class="sous">${themes.length} thème${themes.length > 1 ? 's' : ''}</p>
       </div>
-      <div class="entete-actions">
+      ${estAdmin() ? `<div class="entete-actions">
         <button class="btn-plat" data-action="onglet-modifier" data-id="${id}">Modifier l’onglet</button>
         <button class="btn-plat danger" data-action="onglet-supprimer" data-id="${id}">Supprimer l’onglet</button>
         <button class="btn" data-action="theme-ajouter" data-id="${id}">+ Nouveau thème</button>
-      </div>
+      </div>` : ''}
     </div>
     <div class="grille">${themes.map(carteTheme).join('')}</div>
     ${themes.length ? '' : vide('Aucun thème pour l’instant.')}`;
+  appliquerModeLecture();
 }
 
 const carteTheme = theme => `
@@ -242,14 +309,15 @@ async function viewTheme(id) {
         <h1>${esc(theme.name)}</h1>
         ${theme.description ? `<p class="sous">${esc(theme.description)}</p>` : ''}
       </div>
-      <div class="entete-actions">
+      ${estAdmin() ? `<div class="entete-actions">
         <button class="btn-plat" data-action="theme-modifier" data-id="${theme.id}">Modifier le thème</button>
         <button class="btn-plat danger" data-action="theme-supprimer" data-id="${theme.id}">Supprimer le thème</button>
         <button class="btn" data-action="event-ajouter" data-id="${theme.id}">+ Nouvel événement</button>
-      </div>
+      </div>` : ''}
     </div>
     <div class="liste-events">${theme.events.map(ligneEvent).join('')}</div>
     ${theme.events.length ? '' : vide('Aucun événement dans ce thème.')}`;
+  appliquerModeLecture();
 }
 
 function ligneEvent(evenement) {
@@ -269,6 +337,73 @@ function ligneEvent(evenement) {
     </a>`;
 }
 
+/* ----------------------------------------------------------- vue comptes */
+
+async function viewComptes() {
+  if (!estAdmin()) { location.hash = '#/'; return; }
+  renderTabs(null);
+  const [comptes, arborescence] = await Promise.all([get('/api/users'), chargerArborescence()]);
+  vue.innerHTML = `
+    <p class="fil"><a href="#/">← Retour</a></p>
+    <div class="entete">
+      <div><h1>Comptes</h1><p class="sous">Comptes administrateurs et comptes lecture seule de la famille.</p></div>
+    </div>
+
+    <form class="formulaire-compte" id="form-nouveau-compte">
+      <div><label for="nc-nom">Identifiant</label><input id="nc-nom" name="username" type="text" required></div>
+      <div><label for="nc-mdp">Mot de passe</label><input id="nc-mdp" name="password" type="password" required minlength="4"></div>
+      <button class="btn" type="submit">+ Créer un compte lecture seule</button>
+    </form>
+
+    <div class="comptes-liste">${comptes.map(compte => renderCompteLigne(compte)).join('')}</div>`;
+
+  document.getElementById('form-nouveau-compte').addEventListener('submit', async e => {
+    e.preventDefault();
+    const formulaire = e.target;
+    try {
+      await post('/api/users', { username: formulaire.username.value.trim(), password: formulaire.password.value });
+      await viewComptes();
+    } catch (erreur) {
+      signaler(erreur);
+    }
+  });
+}
+
+async function chargerArborescence() {
+  const onglets = await get('/api/tabs');
+  const resultat = [];
+  for (const onglet of onglets) {
+    const themes = await get(`/api/tabs/${onglet.id}/themes`);
+    for (const theme of themes) {
+      const detail = await get(`/api/themes/${theme.id}`);
+      resultat.push({ tab: onglet, theme: detail });
+    }
+  }
+  return resultat;
+}
+
+function renderCompteLigne(compte) {
+  if (compte.role === 'admin') {
+    return `
+      <div class="compte-ligne">
+        <div class="entete-compte"><h3>${esc(compte.username)}</h3><span class="role">Admin</span></div>
+      </div>`;
+  }
+  return `
+    <div class="compte-ligne${compte.active ? '' : ' revoque'}">
+      <div class="entete-compte">
+        <h3>${esc(compte.username)}</h3>
+        ${compte.active ? '' : '<span class="etiquette-revoque">Révoqué</span>'}
+        <button class="icone" data-action="compte-permissions" data-id="${compte.id}">Gérer les événements visibles</button>
+        <button class="icone" data-action="compte-basculer" data-id="${compte.id}" data-actif="${compte.active}">
+          ${compte.active ? 'Révoquer' : 'Réactiver'}
+        </button>
+        <button class="icone danger" data-action="compte-supprimer" data-id="${compte.id}">Supprimer</button>
+      </div>
+      <div class="permissions-arbre" data-permissions="${compte.id}" hidden></div>
+    </div>`;
+}
+
 /* -------------------------------------------------------- vue événement */
 
 async function viewEvent(id) {
@@ -277,14 +412,14 @@ async function viewEvent(id) {
   renderTabs(evenement.theme?.tab_id);
   vue.innerHTML = `
     <p class="fil"><a href="#/theme/${evenement.theme_id}">← ${esc(evenement.theme?.name || 'Retour')}</a></p>
-    <div class="event">
+    <div class="event${estAdmin() ? '' : ' seule-colonne'}">
       <section>
         <div class="couverture">
           ${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt="">` : ''}
-          <div class="actions">
+          ${estAdmin() ? `<div class="actions">
             <button class="btn-plat" data-action="event-image">${evenement.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
             ${evenement.image_url ? '<button class="btn-plat danger" data-action="event-image-retirer">Retirer</button>' : ''}
-          </div>
+          </div>` : ''}
         </div>
 
         <div class="bloc-papier">
@@ -303,9 +438,9 @@ async function viewEvent(id) {
           </div>
           <label for="c-desc">Description</label>
           <textarea id="c-desc" data-save="event" data-field="description">${esc(evenement.description || '')}</textarea>
-          <div class="entete-actions" style="margin-top:12px">
+          ${estAdmin() ? `<div class="entete-actions" style="margin-top:12px">
             <button class="btn-plat danger" data-action="event-supprimer" data-id="${evenement.id}">Supprimer l’événement</button>
-          </div>
+          </div>` : ''}
         </div>
 
         <div class="bloc-papier">
@@ -317,16 +452,16 @@ async function viewEvent(id) {
           </div>
           <div id="jauge"></div>
           <div id="depenses">${evenement.expenses.map(renderExpense).join('')}</div>
-          <div class="entete-actions" style="margin-top:12px">
+          ${estAdmin() ? `<div class="entete-actions" style="margin-top:12px">
             <button class="btn-plat" data-action="depense-ajouter">+ Ligne de dépense</button>
-          </div>
+          </div>` : ''}
           <div class="resume" id="resume"></div>
         </div>
 
         <div class="blocs" id="blocs">${evenement.blocks.map(renderBlock).join('')}</div>
       </section>
 
-      <aside class="panneau">
+      ${estAdmin() ? `<aside class="panneau">
         <h2>Ajouter du contenu</h2>
         <p class="sous">Cliquez pour insérer un élément dans cet événement.</p>
         ${Object.entries(BLOCK_TYPES).map(([type, def]) => `
@@ -334,9 +469,10 @@ async function viewEvent(id) {
             <span>${def.glyph}</span>
             <span style="font-size:14px">${esc(def.label)}<small>${esc(def.hint)}</small></span>
           </button>`).join('')}
-      </aside>
+      </aside>` : ''}
     </div>`;
   majBudget();
+  appliquerModeLecture();
 }
 
 /* -------------------------------------------------------------- dépenses */
@@ -470,7 +606,7 @@ const signaler = erreur => alert(erreur.message || 'Une erreur est survenue.');
 document.addEventListener('click', async evenement => {
   const bouton = evenement.target.closest('[data-action]');
   if (!bouton) return;
-  evenement.preventDefault();
+  if (bouton.tagName !== 'INPUT') evenement.preventDefault();
   const { action, id, key, type, index } = bouton.dataset;
   const bloc = id && state.event ? trouverBloc(id) : null;
 
@@ -639,6 +775,57 @@ document.addEventListener('click', async evenement => {
         redrawBlock(id);
         break;
       }
+      case 'voir-comptes': {
+        location.hash = '#/comptes';
+        break;
+      }
+      case 'deconnexion': {
+        await post('/api/logout').catch(() => {});
+        state.user = null;
+        renderCompte();
+        afficherConnexion();
+        break;
+      }
+      case 'compte-permissions': {
+        const zone = document.querySelector(`.permissions-arbre[data-permissions="${id}"]`);
+        if (!zone.hidden) { zone.hidden = true; break; }
+        const [permises, arborescence] = await Promise.all([
+          get(`/api/users/${id}/permissions`),
+          chargerArborescence()
+        ]);
+        zone.innerHTML = arborescence.length
+          ? arborescence.map(({ tab, theme }) => `
+              <details class="permissions-theme">
+                <summary>${esc(tab.name)} → ${esc(theme.name)}</summary>
+                ${theme.events.length
+                  ? theme.events.map(ev => `
+                      <label class="permissions-evenement">
+                        <input type="checkbox" data-action="compte-permission-toggle"
+                               data-compte="${id}" data-event="${ev.id}" ${permises.includes(ev.id) ? 'checked' : ''}>
+                        ${esc(ev.name)}
+                      </label>`).join('')
+                  : '<p class="sous" style="padding-left:20px">Aucun événement</p>'}
+              </details>`).join('')
+          : '<p class="sous">Aucun thème pour l’instant.</p>';
+        zone.hidden = false;
+        break;
+      }
+      case 'compte-permission-toggle': {
+        const url = `/api/users/${bouton.dataset.compte}/permissions/${bouton.dataset.event}`;
+        await (bouton.checked ? post(url) : supprimer(url));
+        break;
+      }
+      case 'compte-basculer': {
+        await patch(`/api/users/${id}`, { active: bouton.dataset.actif !== 'true' });
+        await viewComptes();
+        break;
+      }
+      case 'compte-supprimer': {
+        if (!confirm('Supprimer définitivement ce compte ?')) return;
+        await supprimer(`/api/users/${id}`);
+        await viewComptes();
+        break;
+      }
     }
   } catch (erreur) {
     signaler(erreur);
@@ -729,9 +916,54 @@ resultats.addEventListener('click', () => {
   resultats.hidden = true;
 });
 
+/* ------------------------------------------------------------ formulaires d'accès */
+
+formConnexion.addEventListener('submit', async evenement => {
+  evenement.preventDefault();
+  erreurConnexion.hidden = true;
+  try {
+    state.user = await connexion(formConnexion.username.value.trim(), formConnexion.password.value);
+    formConnexion.reset();
+    if (state.user.must_change_password) return afficherEcranMdp();
+    await demarrerApplication();
+  } catch (erreur) {
+    erreurConnexion.textContent = erreur.message;
+    erreurConnexion.hidden = false;
+  }
+});
+
+formMdp.addEventListener('submit', async evenement => {
+  evenement.preventDefault();
+  erreurMdp.hidden = true;
+  if (formMdp.password.value !== formMdp.confirmation.value) {
+    erreurMdp.textContent = 'Les deux mots de passe ne correspondent pas.';
+    erreurMdp.hidden = false;
+    return;
+  }
+  try {
+    await post('/api/password', { password: formMdp.password.value });
+    state.user.must_change_password = false;
+    formMdp.reset();
+    await demarrerApplication();
+  } catch (erreur) {
+    erreurMdp.textContent = erreur.message;
+    erreurMdp.hidden = false;
+  }
+});
+
 /* ---------------------------------------------------------- démarrage */
 
+async function verifierSession() {
+  try {
+    const reponse = await fetch('/api/me');
+    if (reponse.status === 401) return afficherConnexion();
+    state.user = await reponse.json();
+    if (state.user.must_change_password) return afficherEcranMdp();
+    await demarrerApplication();
+  } catch {
+    vue.innerHTML = vide('Impossible de contacter le serveur.');
+  }
+}
+
 window.addEventListener('hashchange', route);
-rechargerOnglets().then(route).catch(erreur => {
-  vue.innerHTML = vide(erreur.message);
-});
+verifierSession();

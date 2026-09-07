@@ -230,6 +230,7 @@ main {
 /* ------------------------------------------------------------ événement */
 
 .event { display: grid; grid-template-columns: 1fr 288px; gap: 22px; align-items: start; }
+.event.seule-colonne { grid-template-columns: 1fr; }
 
 .bloc-papier {
   background: var(--paper);
@@ -400,12 +401,76 @@ dialog h2 { margin-bottom: 14px; }
 dialog label { margin-bottom: 12px; }
 .dialogue-actions { display: flex; flex-direction: row-reverse; justify-content: flex-start; gap: 8px; margin-top: 4px; }
 
+/* ------------------------------------------------------------- compte */
+
+.compte { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.compte .nom { color: var(--ink-soft); }
+.compte .role {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--gold); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+}
+
+/* ------------------------------------------------------- écrans de connexion */
+
+.ecran-auth {
+  position: fixed; inset: 0; z-index: 50;
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.ecran-auth[hidden] { display: none; }
+
+.carte-auth {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+  width: min(360px, 100%);
+}
+.carte-auth h1 { font-size: 22px; margin-bottom: 6px; }
+.carte-auth .sous { margin: 0 0 18px; }
+.carte-auth label { margin-top: 12px; }
+.carte-auth .btn { width: 100%; margin-top: 18px; padding: 9px; }
+
+.erreur-auth { color: var(--alert); font-size: 14px; margin: 12px 0 0; }
+
+/* ------------------------------------------------------------- comptes */
+
+.comptes-liste { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+
+.compte-ligne {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.compte-ligne .entete-compte { display: flex; align-items: center; gap: 10px; }
+.compte-ligne .entete-compte h3 { margin-right: auto; }
+.compte-ligne.revoque { opacity: 0.6; }
+.compte-ligne .etiquette-revoque { color: var(--alert); font-size: 13px; font-weight: 500; }
+
+.formulaire-compte {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end;
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 22px;
+}
+.formulaire-compte label { margin: 0; }
+
+.permissions-arbre { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.permissions-theme { margin-bottom: 10px; }
+.permissions-theme > summary { cursor: pointer; font-weight: 500; padding: 4px 0; }
+.permissions-evenement { display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 20px; font-size: 14px; }
+.permissions-evenement input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--pine); }
+
 @media (max-width: 900px) {
   .event { grid-template-columns: 1fr; }
   .panneau { position: static; }
   .champs { grid-template-columns: 1fr 1fr; }
   main { padding: 20px 16px 60px; }
   .topbar, .rail { padding: 0 16px; }
+  .topbar { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; }
+  .recherche { order: 3; width: 100%; margin-left: 0; }
+  .formulaire-compte { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

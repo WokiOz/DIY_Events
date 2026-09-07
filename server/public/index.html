@@ -10,12 +10,39 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div class="ecran-auth" id="ecran-connexion" hidden>
+    <form class="carte-auth" id="form-connexion">
+      <h1>Mes événements</h1>
+      <p class="sous">Connectez-vous pour continuer.</p>
+      <label for="co-identifiant">Identifiant</label>
+      <input id="co-identifiant" name="username" type="text" autocomplete="username" required>
+      <label for="co-mdp">Mot de passe</label>
+      <input id="co-mdp" name="password" type="password" autocomplete="current-password" required>
+      <p class="erreur-auth" id="erreur-connexion" hidden></p>
+      <button class="btn" type="submit">Se connecter</button>
+    </form>
+  </div>
+
+  <div class="ecran-auth" id="ecran-mdp" hidden>
+    <form class="carte-auth" id="form-mdp">
+      <h1>Nouveau mot de passe</h1>
+      <p class="sous">Choisissez un mot de passe définitif avant de continuer.</p>
+      <label for="mdp-nouveau">Nouveau mot de passe</label>
+      <input id="mdp-nouveau" name="password" type="password" autocomplete="new-password" required minlength="4">
+      <label for="mdp-confirmation">Confirmez-le</label>
+      <input id="mdp-confirmation" name="confirmation" type="password" autocomplete="new-password" required minlength="4">
+      <p class="erreur-auth" id="erreur-mdp" hidden></p>
+      <button class="btn" type="submit">Valider</button>
+    </form>
+  </div>
+
   <header class="topbar">
     <a class="marque" href="#/">Mes événements</a>
     <div class="recherche">
       <input type="search" id="recherche" placeholder="Rechercher un événement" autocomplete="off" aria-label="Rechercher un événement">
       <div class="resultats" id="resultats" hidden></div>
     </div>
+    <div class="compte" id="zone-compte" hidden></div>
   </header>
 
   <nav class="rail" id="rail" aria-label="Onglets"></nav>
