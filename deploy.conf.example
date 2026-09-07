@@ -1,0 +1,7 @@
+# Copiez ce fichier en deploy.conf et renseignez vos valeurs.
+# deploy.conf est ignoré par Git (voir .gitignore) : vos identifiants ne sont jamais versionnés.
+
+SERVER_USER="pi"                  # utilisateur SSH sur le serveur à la maison
+SERVER_HOST="192.168.1.50"        # adresse IP ou nom local (ex : raspberrypi.local)
+SERVER_PATH="/home/pi/mes-evenements"   # dossier du projet sur le serveur
+APP_PORT="8080"                   # port utilisé côté serveur, doit correspondre à APP_PORT dans .env
