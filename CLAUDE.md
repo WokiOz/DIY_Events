@@ -16,6 +16,10 @@ docker compose exec db psql -U evenements evenements    # ouvrir la base
 
 Avec `docker-compose.override.yml` en place, `server/src` et `server/public` sont montés dans le conteneur : modifier le front demande seulement un rafraîchissement du navigateur, modifier le serveur redémarre Node tout seul. Une reconstruction n'est nécessaire qu'en cas de changement dans `package.json` ou le `Dockerfile`.
 
+## Déploiement
+
+En production, la stack tourne dans Portainer en mode **Repository** : `git push` suffit, Portainer récupère et redéploie tout seul (GitOps updates en Polling). Ne jamais committer `docker-compose.override.yml` (il est dans `.gitignore`) : Docker Compose le fusionnerait automatiquement et casserait le déploiement en montant du code source absent sur le serveur. Les variables d'environnement de production (`POSTGRES_PASSWORD`, `APP_PORT`…) se définissent dans l'interface Portainer, pas dans un fichier commité.
+
 ## Architecture
 
 - `server/src/index.js` — toutes les routes API dans un seul fichier. La route attrape-tout `app.get('*')` est en dernier : déclare toute nouvelle route API **avant** elle.
