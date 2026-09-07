@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evenements}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-evenements}
+      POSTGRES_DB: ${POSTGRES_DB:-evenements}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evenements} -d ${POSTGRES_DB:-evenements}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-evenements}:${POSTGRES_PASSWORD:-evenements}@db:5432/${POSTGRES_DB:-evenements}
+    ports:
+      - "${APP_PORT:-8080}:3000"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  uploads:
