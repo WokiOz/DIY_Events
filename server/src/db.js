@@ -1,7 +1,8 @@
 import pg from 'pg';
 import { readFile } from 'node:fs/promises';
 
-export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// pg lit PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE dans l'environnement.
+export const pool = new pg.Pool();
 
 export async function initDatabase() {
   for (let essai = 1; ; essai++) {
