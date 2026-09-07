@@ -9,7 +9,7 @@ cp .env.example .env      # facultatif, des valeurs par défaut existent
 docker compose up -d --build
 ```
 
-Ouvrez ensuite **http://localhost:8080** (changez `APP_PORT` dans `.env` pour un autre port).
+Ouvrez ensuite **http://localhost:3000** (changez `APP_PORT` dans `.env` pour un autre port).
 
 Pour arrêter : `docker compose down`. Les données et les fichiers envoyés survivent à l'arrêt (volumes `db-data` et `uploads`). Pour tout effacer : `docker compose down -v`.
 
@@ -26,7 +26,7 @@ Ensuite, déployer une modification se résume à `git push` : Portainer récup�
 
 **Point de vigilance** : `docker-compose.override.yml` ne doit jamais être commité (il l'est dans `.gitignore`). Docker Compose le fusionne automatiquement s'il est présent, et il monte du code source absent sur le serveur — la stack casserait.
 
-Après un déploiement, vérifiez avec `./scripts/smoke-test.sh http://adresse-du-serveur:8080`.
+Après un déploiement, vérifiez avec `./scripts/smoke-test.sh http://adresse-du-serveur:3000`.
 
 ## Deux conteneurs
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Vérifie que l'API répond correctement. Crée puis supprime des données de test.
-# Usage : ./scripts/smoke-test.sh [url]   (par défaut http://localhost:8080)
+# Usage : ./scripts/smoke-test.sh [url]   (par défaut http://localhost:3000)
 
 set -uo pipefail
-BASE="${1:-http://localhost:8080}"
+BASE="${1:-http://localhost:3000}"
 FAILED=0
 
 check() { # check "description" "attendu" "obtenu"

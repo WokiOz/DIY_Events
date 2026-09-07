@@ -16,7 +16,7 @@ source deploy.conf
 : "${SERVER_USER:?SERVER_USER manquant dans deploy.conf}"
 : "${SERVER_HOST:?SERVER_HOST manquant dans deploy.conf}"
 : "${SERVER_PATH:?SERVER_PATH manquant dans deploy.conf}"
-APP_PORT="${APP_PORT:-8080}"
+APP_PORT="${APP_PORT:-3000}"
 
 TARGET="$SERVER_USER@$SERVER_HOST"
 
