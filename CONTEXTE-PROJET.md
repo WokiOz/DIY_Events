@@ -152,7 +152,7 @@ Principes : interface claire et calme, bordures fines plutôt qu'ombres, une seu
 ## 9. Pièges connus
 
 - `patch()` ne modifie que les colonnes listées dans son quatrième argument. Nouveau champ = ajout dans cette liste.
-- Une chaîne vide envoyée en PATCH est convertie en `NULL` (sauf pour `name`). C'est ce qui permet d'effacer une date ou une image.
+- Une chaîne vide envoyée en PATCH est convertie en `NULL` (sauf pour `name` et `label`, colonnes `NOT NULL`, et `amount` qui devient `0`). C'est ce qui permet d'effacer une date ou une image. La liste `COLONNES_REQUISES` en haut de `index.js` protège ces colonnes.
 - `event_date` revient de Postgres au format ISO complet ; le front fait `.slice(0, 10)` pour alimenter un `<input type="date">`.
 - Les colonnes `NUMERIC` reviennent en chaîne : les requêtes utilisent `::float` là où le front a besoin d'un nombre.
 - `app.get('*')` en fin de `index.js` renvoie `index.html` pour toute route inconnue ; toute nouvelle route API doit être déclarée **avant**.
