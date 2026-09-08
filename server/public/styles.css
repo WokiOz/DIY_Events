@@ -19,6 +19,7 @@ body {
   background: var(--surface);
   color: var(--ink);
   font: 400 15px/1.55 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow-x: hidden; /* la bannière pleine largeur (100vw) ne doit pas créer de scroll horizontal */
 }
 
 h1, h2, h3 {
@@ -253,6 +254,16 @@ main {
 .couverture img { width: 100%; height: 100%; object-fit: cover; }
 .couverture .actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
 .couverture .actions .btn-plat { padding: 5px 10px; font-size: 13px; }
+
+/* page thème : bannière en pleine largeur de la fenêtre, plus seulement du contenu (main) */
+.couverture-pleine-largeur {
+  width: 100vw;
+  margin-left: 50%;
+  transform: translateX(-50%);
+  max-height: 420px;
+  border-radius: 0;
+  border: 0;
+}
 
 /* ----------------------------------------------------------- recadreur */
 

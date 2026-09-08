@@ -495,7 +495,7 @@ async function viewTheme(id) {
   renderTabs(theme.tab_id);
   vue.innerHTML = `
     <p class="fil"><a href="#/tab/${theme.tab_id}">← Retour</a></p>
-    <div class="couverture">
+    <div class="couverture couverture-pleine-largeur">
       ${theme.image_url
         ? `<img src="${esc(theme.image_url)}" style="object-position:${esc(theme.image_focus || '50% 50%')}" alt="">`
         : ''}
