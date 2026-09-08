@@ -241,7 +241,8 @@ main {
 }
 
 .couverture {
-  height: 190px;
+  aspect-ratio: 5 / 2;
+  max-height: 320px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   background: var(--pine-tint);
@@ -252,6 +253,74 @@ main {
 .couverture img { width: 100%; height: 100%; object-fit: cover; }
 .couverture .actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
 .couverture .actions .btn-plat { padding: 5px 10px; font-size: 13px; }
+
+/* ----------------------------------------------------------- recadreur */
+
+.recadreur { display: flex; flex-direction: column; gap: 12px; }
+
+.recadreur-bascule { display: flex; gap: 6px; }
+.recadreur-bascule button {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  padding: 7px 8px;
+  font: 500 13px/1.2 'Public Sans', system-ui, sans-serif;
+  cursor: pointer;
+}
+.recadreur-bascule button.actif { border-color: var(--pine); color: var(--pine); background: var(--pine-tint); }
+
+.recadreur-zone {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: visible;
+  touch-action: none;
+  cursor: crosshair;
+}
+.recadreur-zone img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+
+.recadreur-vise {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(22, 33, 29, 0.4), 0 1px 4px rgba(22, 33, 29, 0.35);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.recadreur-vise::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--pine);
+}
+
+.recadreur-cadre {
+  position: absolute;
+  border: 2px dashed #fff;
+  box-shadow: 0 0 0 1px rgba(22, 33, 29, 0.6), 0 0 0 2000px rgba(22, 33, 29, 0.4);
+  cursor: move;
+}
+.recadreur-poignee {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--ink);
+  cursor: nwse-resize;
+}
+
+.recadreur-aide { color: var(--ink-soft); font-size: 12.5px; margin: 0; }
 
 label { display: block; font-size: 13px; color: var(--ink-soft); font-weight: 500; margin-bottom: 4px; }
 

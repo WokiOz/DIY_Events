@@ -209,25 +209,198 @@ function demander(titre, champs) {
   });
 }
 
+async function envoyerFichier(fichier, nom) {
+  const formulaire = new FormData();
+  formulaire.append('file', fichier, nom);
+  const reponse = await fetch('/api/upload', { method: 'POST', body: formulaire });
+  const donnees = await reponse.json().catch(() => null);
+  if (!reponse.ok) {
+    alert(donnees?.error || 'L’envoi du fichier a échoué.');
+    return null;
+  }
+  return donnees;
+}
+
 function choisirFichier(accept) {
   return new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';
     if (accept) input.accept = accept;
-    input.onchange = async () => {
+    input.onchange = () => {
       const fichier = input.files[0];
       if (!fichier) return resolve(null);
-      const formulaire = new FormData();
-      formulaire.append('file', fichier);
-      const reponse = await fetch('/api/upload', { method: 'POST', body: formulaire });
-      const donnees = await reponse.json().catch(() => null);
-      if (!reponse.ok) {
-        alert(donnees?.error || 'L’envoi du fichier a échoué.');
-        return resolve(null);
-      }
-      resolve(donnees);
+      envoyerFichier(fichier, fichier.name).then(resolve);
     };
     input.click();
+  });
+}
+
+/* --------------------------------------------------------- recadreur photo */
+
+const RATIO_RECADRAGE = 5 / 2;
+
+function ouvrirRecadreur(url, focusInitial) {
+  return new Promise(resolve => {
+    dialogueForm.innerHTML = `
+      <h2>Cadrer la photo</h2>
+      <div class="recadreur">
+        <div class="recadreur-bascule">
+          <button type="button" class="actif" data-mode="focus">Point de centrage</button>
+          <button type="button" data-mode="crop">Recadrage précis</button>
+        </div>
+        <div class="recadreur-zone">
+          <img alt="" src="${esc(url)}">
+        </div>
+        <p class="recadreur-aide" data-aide></p>
+      </div>
+      <div class="dialogue-actions">
+        <button class="btn" value="ok">Valider</button>
+        <button class="btn-plat" value="annuler">Annuler</button>
+      </div>`;
+
+    const zone = dialogueForm.querySelector('.recadreur-zone');
+    const img = zone.querySelector('img');
+    const aide = dialogueForm.querySelector('[data-aide]');
+    const boutonsMode = dialogueForm.querySelectorAll('.recadreur-bascule button');
+    let mode = 'focus';
+    let vise = null;
+    let cadre = null;
+
+    const aides = {
+      focus: 'Clique sur la partie de la photo à garder visible dans la bannière comme dans les vignettes.',
+      crop: 'Déplace le cadre, agrandis-le par le coin, puis valide.'
+    };
+
+    // rectangle de la photo réellement affichée dans la zone (object-fit: contain)
+    function rectPhoto() {
+      const z = zone.getBoundingClientRect();
+      const echelle = Math.min(z.width / img.naturalWidth, z.height / img.naturalHeight);
+      const largeur = img.naturalWidth * echelle;
+      const hauteur = img.naturalHeight * echelle;
+      return { x: (z.width - largeur) / 2, y: (z.height - hauteur) / 2, largeur, hauteur, zone: z };
+    }
+
+    function placerVise(xPct, yPct) {
+      if (!vise) {
+        vise = document.createElement('div');
+        vise.className = 'recadreur-vise';
+        zone.appendChild(vise);
+      }
+      const p = rectPhoto();
+      vise.style.left = `${p.x + (xPct / 100) * p.largeur}px`;
+      vise.style.top = `${p.y + (yPct / 100) * p.hauteur}px`;
+      vise.dataset.x = xPct;
+      vise.dataset.y = yPct;
+    }
+
+    function creerCadre() {
+      if (cadre) return;
+      const p = rectPhoto();
+      const largeur = Math.min(p.largeur, p.hauteur * RATIO_RECADRAGE) * 0.85;
+      const hauteur = largeur / RATIO_RECADRAGE;
+      cadre = document.createElement('div');
+      cadre.className = 'recadreur-cadre';
+      cadre.innerHTML = '<span class="recadreur-poignee"></span>';
+      cadre.style.left = `${p.x + (p.largeur - largeur) / 2}px`;
+      cadre.style.top = `${p.y + (p.hauteur - hauteur) / 2}px`;
+      cadre.style.width = `${largeur}px`;
+      cadre.style.height = `${hauteur}px`;
+      zone.appendChild(cadre);
+
+      const poignee = cadre.querySelector('.recadreur-poignee');
+      const glisser = (evenement, redimensionner) => {
+        evenement.preventDefault();
+        const depart = { x: evenement.clientX, y: evenement.clientY };
+        const initial = { left: cadre.offsetLeft, top: cadre.offsetTop, largeur: cadre.offsetWidth, hauteur: cadre.offsetHeight };
+        const bouger = e => {
+          const p2 = rectPhoto();
+          const dx = e.clientX - depart.x;
+          const dy = e.clientY - depart.y;
+          if (redimensionner) {
+            const delta = Math.max(dx, dy * RATIO_RECADRAGE);
+            let largeur2 = Math.min(
+              Math.max(60, initial.largeur + delta),
+              p2.x + p2.largeur - initial.left,
+              (p2.y + p2.hauteur - initial.top) * RATIO_RECADRAGE
+            );
+            cadre.style.width = `${largeur2}px`;
+            cadre.style.height = `${largeur2 / RATIO_RECADRAGE}px`;
+          } else {
+            const left = Math.min(Math.max(p2.x, initial.left + dx), p2.x + p2.largeur - initial.largeur);
+            const top = Math.min(Math.max(p2.y, initial.top + dy), p2.y + p2.hauteur - initial.hauteur);
+            cadre.style.left = `${left}px`;
+            cadre.style.top = `${top}px`;
+          }
+        };
+        const relacher = () => {
+          document.removeEventListener('pointermove', bouger);
+          document.removeEventListener('pointerup', relacher);
+        };
+        document.addEventListener('pointermove', bouger);
+        document.addEventListener('pointerup', relacher);
+      };
+      cadre.addEventListener('pointerdown', evenement => {
+        if (evenement.target === poignee) return;
+        glisser(evenement, false);
+      });
+      poignee.addEventListener('pointerdown', evenement => {
+        evenement.stopPropagation();
+        glisser(evenement, true);
+      });
+    }
+
+    function definirMode(nouveauMode) {
+      mode = nouveauMode;
+      boutonsMode.forEach(b => b.classList.toggle('actif', b.dataset.mode === mode));
+      aide.textContent = aides[mode];
+      if (mode === 'crop') creerCadre();
+    }
+
+    zone.addEventListener('click', evenement => {
+      if (mode !== 'focus' || evenement.target !== img && evenement.target !== zone) return;
+      const p = rectPhoto();
+      const xPct = Math.max(0, Math.min(100, ((evenement.clientX - p.zone.left - p.x) / p.largeur) * 100));
+      const yPct = Math.max(0, Math.min(100, ((evenement.clientY - p.zone.top - p.y) / p.hauteur) * 100));
+      placerVise(xPct, yPct);
+    });
+
+    boutonsMode.forEach(bouton => bouton.addEventListener('click', () => definirMode(bouton.dataset.mode)));
+
+    img.onload = () => {
+      const [xInit, yInit] = (focusInitial || '50% 50%').replace(/%/g, '').trim().split(/\s+/).map(Number);
+      placerVise(xInit || 50, yInit || 50);
+      aide.textContent = aides.focus;
+    };
+    if (img.complete) img.onload();
+
+    // Le cadre et la zone photo ne sont plus mesurables une fois le <dialog> fermé
+    // (dimensions à zéro) : tout se calcule pendant la soumission, avant la fermeture.
+    let resultat = null;
+    dialogueForm.addEventListener('submit', evenement => {
+      if (evenement.submitter?.value !== 'ok') return;
+      if (mode === 'focus') {
+        const x = vise?.dataset.x ?? 50;
+        const y = vise?.dataset.y ?? 50;
+        resultat = { mode: 'focus', valeur: `${Math.round(x)}% ${Math.round(y)}%` };
+        return;
+      }
+      const p = rectPhoto();
+      const echelle = img.naturalWidth / p.largeur;
+      const toile = document.createElement('canvas');
+      toile.width = 1000;
+      toile.height = Math.round(1000 / RATIO_RECADRAGE);
+      toile.getContext('2d').drawImage(
+        img,
+        (cadre.offsetLeft - p.x) * echelle, (cadre.offsetTop - p.y) * echelle,
+        cadre.offsetWidth * echelle, cadre.offsetHeight * echelle,
+        0, 0, toile.width, toile.height
+      );
+      // toBlob est asynchrone : on retient la fermeture le temps de l'export
+      evenement.preventDefault();
+      toile.toBlob(blob => { resultat = { mode: 'crop', blob }; dialogue.close('ok'); }, 'image/jpeg', 0.9);
+    }, { once: true });
+    dialogue.addEventListener('close', () => resolve(resultat), { once: true });
+    dialogue.showModal();
   });
 }
 
@@ -289,7 +462,9 @@ async function viewTab(id) {
 
 const carteTheme = theme => `
   <a class="carte" href="#/theme/${theme.id}">
-    <div class="visuel">${theme.image_url ? `<img src="${esc(theme.image_url)}" alt="">` : '✦'}</div>
+    <div class="visuel">${theme.image_url
+      ? `<img src="${esc(theme.image_url)}" style="object-position:${esc(theme.image_focus || '50% 50%')}" alt="">`
+      : '✦'}</div>
     <div class="corps">
       <h3>${esc(theme.name)}</h3>
       ${theme.description ? `<p>${esc(theme.description)}</p>` : ''}
@@ -305,9 +480,12 @@ async function viewTheme(id) {
   vue.innerHTML = `
     <p class="fil"><a href="#/tab/${theme.tab_id}">← Retour</a></p>
     <div class="couverture">
-      ${theme.image_url ? `<img src="${esc(theme.image_url)}" alt="">` : ''}
+      ${theme.image_url
+        ? `<img src="${esc(theme.image_url)}" style="object-position:${esc(theme.image_focus || '50% 50%')}" alt="">`
+        : ''}
       ${estAdmin() ? `<div class="actions">
         <button class="btn-plat" data-action="theme-image" data-id="${theme.id}">${theme.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+        ${theme.image_url ? `<button class="btn-plat" data-action="theme-image-repositionner" data-id="${theme.id}">Cadrer</button>` : ''}
         ${theme.image_url ? `<button class="btn-plat danger" data-action="theme-image-retirer" data-id="${theme.id}">Retirer</button>` : ''}
       </div>` : ''}
     </div>
@@ -668,12 +846,34 @@ document.addEventListener('click', async evenement => {
       case 'theme-image': {
         const fichier = await choisirFichier('image/*');
         if (!fichier) return;
-        await patch(`/api/themes/${id}`, { image_url: fichier.url });
+        const reglage = await ouvrirRecadreur(fichier.url);
+        if (!reglage) { await patch(`/api/themes/${id}`, { image_url: fichier.url, image_focus: '' }); route(); break; }
+        if (reglage.mode === 'crop') {
+          const recadree = await envoyerFichier(reglage.blob, 'recadrage.jpg');
+          if (!recadree) return;
+          await patch(`/api/themes/${id}`, { image_url: recadree.url, image_focus: '' });
+        } else {
+          await patch(`/api/themes/${id}`, { image_url: fichier.url, image_focus: reglage.valeur });
+        }
+        route();
+        break;
+      }
+      case 'theme-image-repositionner': {
+        const theme = await get(`/api/themes/${id}`);
+        const reglage = await ouvrirRecadreur(theme.image_url, theme.image_focus);
+        if (!reglage) return;
+        if (reglage.mode === 'crop') {
+          const recadree = await envoyerFichier(reglage.blob, 'recadrage.jpg');
+          if (!recadree) return;
+          await patch(`/api/themes/${id}`, { image_url: recadree.url, image_focus: '' });
+        } else {
+          await patch(`/api/themes/${id}`, { image_focus: reglage.valeur });
+        }
         route();
         break;
       }
       case 'theme-image-retirer': {
-        await patch(`/api/themes/${id}`, { image_url: '' });
+        await patch(`/api/themes/${id}`, { image_url: '', image_focus: '' });
         route();
         break;
       }

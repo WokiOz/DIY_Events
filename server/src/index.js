@@ -262,7 +262,7 @@ app.get('/api/themes/:id', a(async (req, res) => {
 }));
 
 app.patch('/api/themes/:id', exigerAdmin, a(async (req, res) => {
-  const theme = await patch('themes', req.params.id, req.body, ['name', 'image_url', 'description']);
+  const theme = await patch('themes', req.params.id, req.body, ['name', 'image_url', 'image_focus', 'description']);
   theme ? res.json(theme) : introuvable(res, 'Thème');
 }));
 
