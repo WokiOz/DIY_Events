@@ -293,7 +293,7 @@ async function viewTab(id) {
 
 const carteTheme = theme => `
   <a class="carte" href="#/theme/${theme.id}">
-    <div class="visuel">✦</div>
+    <div class="visuel">${theme.image_url ? `<img src="${esc(theme.image_url)}" alt="">` : '✦'}</div>
     <div class="corps">
       <h3>${esc(theme.name)}</h3>
       ${theme.description ? `<p>${esc(theme.description)}</p>` : ''}
@@ -314,6 +314,8 @@ async function viewTheme(id) {
         ${theme.description ? `<p class="sous">${esc(theme.description)}</p>` : ''}
       </div>
       ${estAdmin() ? `<div class="entete-actions">
+        <button class="btn-plat" data-action="theme-image" data-id="${theme.id}">${theme.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+        ${theme.image_url ? `<button class="btn-plat danger" data-action="theme-image-retirer" data-id="${theme.id}">Retirer la photo</button>` : ''}
         <button class="btn-plat" data-action="theme-modifier" data-id="${theme.id}">Modifier le thème</button>
         <button class="btn-plat danger" data-action="theme-supprimer" data-id="${theme.id}">Supprimer le thème</button>
         <button class="btn" data-action="event-ajouter" data-id="${theme.id}">+ Nouvel événement</button>
@@ -649,6 +651,18 @@ document.addEventListener('click', async evenement => {
         if (!reponse?.name) return;
         const theme = await post('/api/themes', { tab_id: Number(id), ...reponse });
         location.hash = `#/theme/${theme.id}`;
+        break;
+      }
+      case 'theme-image': {
+        const fichier = await choisirFichier('image/*');
+        if (!fichier) return;
+        await patch(`/api/themes/${id}`, { image_url: fichier.url });
+        route();
+        break;
+      }
+      case 'theme-image-retirer': {
+        await patch(`/api/themes/${id}`, { image_url: '' });
+        route();
         break;
       }
       case 'theme-modifier': {
