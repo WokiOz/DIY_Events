@@ -241,8 +241,8 @@ main {
 }
 
 .couverture {
-  aspect-ratio: 5 / 2;
-  max-height: 320px;
+  aspect-ratio: 3 / 1;
+  max-height: 240px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   background: var(--pine-tint);
@@ -310,17 +310,34 @@ main {
 }
 .recadreur-poignee {
   position: absolute;
-  right: -6px;
-  bottom: -6px;
-  width: 14px;
-  height: 14px;
+  right: -13px;
+  bottom: -13px;
+  width: 26px;
+  height: 26px;
+  cursor: nwse-resize;
+}
+.recadreur-poignee::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
   border-radius: 50%;
   background: #fff;
   border: 1px solid var(--ink);
-  cursor: nwse-resize;
 }
 
-.recadreur-aide { color: var(--ink-soft); font-size: 12.5px; margin: 0; }
+.recadreur-pied { display: flex; align-items: baseline; gap: 12px; }
+.recadreur-aide { color: var(--ink-soft); font-size: 12.5px; margin: 0; flex: 1; }
+.reset-lien {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--pine);
+  font: 500 12.5px/1 'Public Sans', system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 label { display: block; font-size: 13px; color: var(--ink-soft); font-weight: 500; margin-bottom: 4px; }
 

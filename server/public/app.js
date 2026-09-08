@@ -237,7 +237,7 @@ function choisirFichier(accept) {
 
 /* --------------------------------------------------------- recadreur photo */
 
-const RATIO_RECADRAGE = 5 / 2;
+const RATIO_RECADRAGE = 3;
 
 function ouvrirRecadreur(url, focusInitial) {
   return new Promise(resolve => {
@@ -251,7 +251,10 @@ function ouvrirRecadreur(url, focusInitial) {
         <div class="recadreur-zone">
           <img alt="" src="${esc(url)}">
         </div>
-        <p class="recadreur-aide" data-aide></p>
+        <div class="recadreur-pied">
+          <p class="recadreur-aide" data-aide></p>
+          <button type="button" class="reset-lien" data-reset hidden>Réinitialiser le cadre</button>
+        </div>
       </div>
       <div class="dialogue-actions">
         <button class="btn" value="ok">Valider</button>
@@ -261,6 +264,7 @@ function ouvrirRecadreur(url, focusInitial) {
     const zone = dialogueForm.querySelector('.recadreur-zone');
     const img = zone.querySelector('img');
     const aide = dialogueForm.querySelector('[data-aide]');
+    const resetBtn = dialogueForm.querySelector('[data-reset]');
     const boutonsMode = dialogueForm.querySelectorAll('.recadreur-bascule button');
     let mode = 'focus';
     let vise = null;
@@ -293,18 +297,27 @@ function ouvrirRecadreur(url, focusInitial) {
       vise.dataset.y = yPct;
     }
 
+    // le plus grand cadre possible au ratio de la bannière, centré sur la photo
+    function cadreParDefaut() {
+      const p = rectPhoto();
+      const largeur = Math.min(p.largeur, p.hauteur * RATIO_RECADRAGE) * 0.95;
+      const hauteur = largeur / RATIO_RECADRAGE;
+      return { left: p.x + (p.largeur - largeur) / 2, top: p.y + (p.hauteur - hauteur) / 2, largeur, hauteur };
+    }
+
+    function placerCadre({ left, top, largeur, hauteur }) {
+      cadre.style.left = `${left}px`;
+      cadre.style.top = `${top}px`;
+      cadre.style.width = `${largeur}px`;
+      cadre.style.height = `${hauteur}px`;
+    }
+
     function creerCadre() {
       if (cadre) return;
-      const p = rectPhoto();
-      const largeur = Math.min(p.largeur, p.hauteur * RATIO_RECADRAGE) * 0.85;
-      const hauteur = largeur / RATIO_RECADRAGE;
       cadre = document.createElement('div');
       cadre.className = 'recadreur-cadre';
       cadre.innerHTML = '<span class="recadreur-poignee"></span>';
-      cadre.style.left = `${p.x + (p.largeur - largeur) / 2}px`;
-      cadre.style.top = `${p.y + (p.hauteur - hauteur) / 2}px`;
-      cadre.style.width = `${largeur}px`;
-      cadre.style.height = `${hauteur}px`;
+      placerCadre(cadreParDefaut());
       zone.appendChild(cadre);
 
       const poignee = cadre.querySelector('.recadreur-poignee');
@@ -353,8 +366,11 @@ function ouvrirRecadreur(url, focusInitial) {
       mode = nouveauMode;
       boutonsMode.forEach(b => b.classList.toggle('actif', b.dataset.mode === mode));
       aide.textContent = aides[mode];
+      resetBtn.hidden = mode !== 'crop';
       if (mode === 'crop') creerCadre();
     }
+
+    resetBtn.addEventListener('click', () => placerCadre(cadreParDefaut()));
 
     zone.addEventListener('click', evenement => {
       if (mode !== 'focus' || evenement.target !== img && evenement.target !== zone) return;
@@ -847,33 +863,36 @@ document.addEventListener('click', async evenement => {
         const fichier = await choisirFichier('image/*');
         if (!fichier) return;
         const reglage = await ouvrirRecadreur(fichier.url);
-        if (!reglage) { await patch(`/api/themes/${id}`, { image_url: fichier.url, image_focus: '' }); route(); break; }
-        if (reglage.mode === 'crop') {
+        if (!reglage) {
+          await patch(`/api/themes/${id}`, { image_url: fichier.url, image_source_url: fichier.url, image_focus: '' });
+        } else if (reglage.mode === 'crop') {
           const recadree = await envoyerFichier(reglage.blob, 'recadrage.jpg');
           if (!recadree) return;
-          await patch(`/api/themes/${id}`, { image_url: recadree.url, image_focus: '' });
+          await patch(`/api/themes/${id}`, { image_url: recadree.url, image_source_url: fichier.url, image_focus: '' });
         } else {
-          await patch(`/api/themes/${id}`, { image_url: fichier.url, image_focus: reglage.valeur });
+          await patch(`/api/themes/${id}`, { image_url: fichier.url, image_source_url: fichier.url, image_focus: reglage.valeur });
         }
         route();
         break;
       }
       case 'theme-image-repositionner': {
         const theme = await get(`/api/themes/${id}`);
-        const reglage = await ouvrirRecadreur(theme.image_url, theme.image_focus);
+        // toujours recadrer depuis la photo d'origine, jamais depuis un recadrage précédent
+        const source = theme.image_source_url || theme.image_url;
+        const reglage = await ouvrirRecadreur(source, theme.image_focus);
         if (!reglage) return;
         if (reglage.mode === 'crop') {
           const recadree = await envoyerFichier(reglage.blob, 'recadrage.jpg');
           if (!recadree) return;
           await patch(`/api/themes/${id}`, { image_url: recadree.url, image_focus: '' });
         } else {
-          await patch(`/api/themes/${id}`, { image_focus: reglage.valeur });
+          await patch(`/api/themes/${id}`, { image_url: source, image_focus: reglage.valeur });
         }
         route();
         break;
       }
       case 'theme-image-retirer': {
-        await patch(`/api/themes/${id}`, { image_url: '', image_focus: '' });
+        await patch(`/api/themes/${id}`, { image_url: '', image_source_url: '', image_focus: '' });
         route();
         break;
       }
