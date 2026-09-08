@@ -304,6 +304,13 @@ async function viewTheme(id) {
   renderTabs(theme.tab_id);
   vue.innerHTML = `
     <p class="fil"><a href="#/tab/${theme.tab_id}">← Retour</a></p>
+    <div class="couverture">
+      ${theme.image_url ? `<img src="${esc(theme.image_url)}" alt="">` : ''}
+      ${estAdmin() ? `<div class="actions">
+        <button class="btn-plat" data-action="theme-image" data-id="${theme.id}">${theme.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+        ${theme.image_url ? `<button class="btn-plat danger" data-action="theme-image-retirer" data-id="${theme.id}">Retirer</button>` : ''}
+      </div>` : ''}
+    </div>
     <div class="entete">
       <div>
         <h1>${esc(theme.name)}</h1>
@@ -655,6 +662,18 @@ document.addEventListener('click', async evenement => {
         ]);
         if (!reponse?.name) return;
         await patch(`/api/themes/${id}`, reponse);
+        route();
+        break;
+      }
+      case 'theme-image': {
+        const fichier = await choisirFichier('image/*');
+        if (!fichier) return;
+        await patch(`/api/themes/${id}`, { image_url: fichier.url });
+        route();
+        break;
+      }
+      case 'theme-image-retirer': {
+        await patch(`/api/themes/${id}`, { image_url: '' });
         route();
         break;
       }
