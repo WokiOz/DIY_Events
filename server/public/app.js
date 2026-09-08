@@ -167,6 +167,14 @@ const dateFr = valeur => valeur
 
 const vide = texte => `<p class="vide">${esc(texte)}</p>`;
 
+function motDePasseAleatoire(longueur = 10) {
+  // sans caractères ambigus (0/O, 1/l/I) pour rester lisible une fois noté à la main
+  const caracteres = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const octets = new Uint32Array(longueur);
+  crypto.getRandomValues(octets);
+  return Array.from(octets, o => caracteres[o % caracteres.length]).join('');
+}
+
 const rail = document.getElementById('rail');
 const vue = document.getElementById('vue');
 const dialogue = document.getElementById('dialogue');
@@ -356,7 +364,13 @@ async function viewComptes() {
 
     <form class="formulaire-compte" id="form-nouveau-compte">
       <div><label for="nc-nom">Identifiant</label><input id="nc-nom" name="username" type="text" required></div>
-      <div><label for="nc-mdp">Mot de passe</label><input id="nc-mdp" name="password" type="password" required minlength="4"></div>
+      <div>
+        <div class="champ-event-tete">
+          <label for="nc-mdp">Mot de passe</label>
+          <button type="button" class="icone" data-action="compte-mdp-aleatoire">Aléatoire</button>
+        </div>
+        <input id="nc-mdp" name="password" type="password" required minlength="4">
+      </div>
       <button class="btn" type="submit">+ Créer un compte lecture seule</button>
     </form>
 
@@ -850,6 +864,12 @@ document.addEventListener('click', async evenement => {
       }
       case 'voir-comptes': {
         location.hash = '#/comptes';
+        break;
+      }
+      case 'compte-mdp-aleatoire': {
+        const champ = document.getElementById('nc-mdp');
+        champ.type = 'text';
+        champ.value = motDePasseAleatoire();
         break;
       }
       case 'deconnexion': {
