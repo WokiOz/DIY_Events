@@ -212,20 +212,6 @@ main {
 .carte .corps p { margin: 4px 0 0; color: var(--ink-soft); font-size: 14px; }
 .carte .compte { color: var(--gold); font-size: 13px; font-weight: 500; }
 
-.liste-events { display: flex; flex-direction: column; gap: 10px; }
-
-.ligne-event {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 13px 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.ligne-event:hover { border-color: var(--pine); }
-.ligne-event .infos { color: var(--ink-soft); font-size: 14px; }
-.ligne-event .argent { margin-left: auto; text-align: right; font-size: 14px; white-space: nowrap; }
 .depasse { color: var(--alert); font-weight: 500; }
 
 /* ------------------------------------------------------------ événement */
@@ -483,9 +469,6 @@ dialog label { margin-bottom: 12px; }
 
   .budget-tete { flex-wrap: wrap; }
   .budget-tete input { width: 100px; }
-
-  .ligne-event { flex-wrap: wrap; row-gap: 4px; }
-  .ligne-event .argent { margin-left: 0; width: 100%; text-align: left; }
 
   dialog { max-height: 88vh; overflow-y: auto; }
 }

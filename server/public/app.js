@@ -321,25 +321,24 @@ async function viewTheme(id) {
         <button class="btn" data-action="event-ajouter" data-id="${theme.id}">+ Nouvel événement</button>
       </div>` : ''}
     </div>
-    <div class="liste-events">${theme.events.map(ligneEvent).join('')}</div>
+    <div class="grille">${theme.events.map(carteEvent).join('')}</div>
     ${theme.events.length ? '' : vide('Aucun événement dans ce thème.')}`;
   appliquerModeLecture();
 }
 
-function ligneEvent(evenement) {
+function carteEvent(evenement) {
   const budget = Number(evenement.budget || 0);
   const depense = Number(evenement.spent || 0);
   const infos = [dateFr(evenement.event_date), evenement.location, evenement.guests ? `${evenement.guests} invités` : '']
     .filter(Boolean).join(' · ');
   return `
-    <a class="ligne-event" href="#/event/${evenement.id}">
-      <div>
+    <a class="carte" href="#/event/${evenement.id}">
+      <div class="visuel">${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt="">` : '✦'}</div>
+      <div class="corps">
         <h3>${esc(evenement.name)}</h3>
-        ${infos ? `<div class="infos">${esc(infos)}</div>` : ''}
+        ${infos ? `<p>${esc(infos)}</p>` : ''}
+        ${budget ? `<p class="${depense > budget ? 'depasse' : 'compte'}">${argent(depense)} sur ${argent(budget)}</p>` : ''}
       </div>
-      ${budget ? `<div class="argent">
-        <span class="${depense > budget ? 'depasse' : ''}">${argent(depense)}</span> sur ${argent(budget)}
-      </div>` : ''}
     </a>`;
 }
 
