@@ -411,8 +411,50 @@ function renderCompteLigne(compte) {
 
 /* -------------------------------------------------------- vue événement */
 
+const CHAMPS_EVENT = [
+  { champ: 'event_date', label: 'Date', input: 'date' },
+  { champ: 'location', label: 'Lieu', input: 'text' },
+  { champ: 'guests', label: 'Invités', input: 'number' }
+];
+
+function renderChampsEvent(evenement) {
+  return CHAMPS_EVENT.map(({ champ, label, input }) => {
+    if (evenement.champsCaches.has(champ)) {
+      return `<button type="button" class="ajout-champ" data-action="event-champ-ajouter" data-champ="${champ}">+ ${label}</button>`;
+    }
+    const valeur = champ === 'event_date' ? (evenement.event_date || '').slice(0, 10) : (evenement[champ] ?? '');
+    return `
+      <div>
+        <div class="champ-event-tete">
+          <label for="c-${champ}">${label}</label>
+          <button type="button" class="icone" data-action="event-champ-retirer" data-champ="${champ}" title="Retirer ce champ">✕</button>
+        </div>
+        <input id="c-${champ}" type="${input}" ${input === 'number' ? 'min="0"' : ''}
+               data-save="event" data-field="${champ}" value="${esc(valeur)}">
+      </div>`;
+  }).join('');
+}
+
+function renderDescriptionEvent(evenement) {
+  if (evenement.champsCaches.has('description')) {
+    return `<button type="button" class="ajout-champ" data-action="event-champ-ajouter" data-champ="description">+ Description</button>`;
+  }
+  return `
+    <div class="champ-event-tete">
+      <label for="c-desc">Description</label>
+      <button type="button" class="icone" data-action="event-champ-retirer" data-champ="description" title="Retirer ce champ">✕</button>
+    </div>
+    <textarea id="c-desc" data-save="event" data-field="description">${esc(evenement.description || '')}</textarea>`;
+}
+
+function redessinerChampsEvent() {
+  document.getElementById('champs-event').innerHTML = renderChampsEvent(state.event);
+  document.getElementById('description-event').innerHTML = renderDescriptionEvent(state.event);
+}
+
 async function viewEvent(id) {
   const evenement = await get(`/api/events/${id}`);
+  evenement.champsCaches = new Set();
   state.event = evenement;
   renderTabs(evenement.theme?.tab_id);
   vue.innerHTML = `
@@ -430,19 +472,8 @@ async function viewEvent(id) {
         <div class="bloc-papier">
           <input class="titre-event" type="text" data-save="event" data-field="name"
                  value="${esc(evenement.name)}" placeholder="Nom de l’événement">
-          <div class="champs">
-            <div><label for="c-date">Date</label>
-              <input id="c-date" type="date" data-save="event" data-field="event_date"
-                     value="${esc((evenement.event_date || '').slice(0, 10))}"></div>
-            <div><label for="c-lieu">Lieu</label>
-              <input id="c-lieu" type="text" data-save="event" data-field="location"
-                     value="${esc(evenement.location || '')}"></div>
-            <div><label for="c-invites">Invités</label>
-              <input id="c-invites" type="number" min="0" data-save="event" data-field="guests"
-                     value="${esc(evenement.guests ?? '')}"></div>
-          </div>
-          <label for="c-desc">Description</label>
-          <textarea id="c-desc" data-save="event" data-field="description">${esc(evenement.description || '')}</textarea>
+          <div class="champs" id="champs-event">${renderChampsEvent(evenement)}</div>
+          <div id="description-event">${renderDescriptionEvent(evenement)}</div>
           ${estAdmin() ? `<div class="entete-actions" style="margin-top:12px">
             <button class="btn-plat danger" data-action="event-supprimer" data-id="${evenement.id}">Supprimer l’événement</button>
           </div>` : ''}
@@ -710,6 +741,21 @@ document.addEventListener('click', async evenement => {
       case 'event-image-retirer': {
         await patch(`/api/events/${state.event.id}`, { image_url: '' });
         route();
+        break;
+      }
+      case 'event-champ-retirer': {
+        const champ = bouton.dataset.champ;
+        state.event.champsCaches.add(champ);
+        state.event[champ] = champ === 'guests' ? null : '';
+        await patch(`/api/events/${state.event.id}`, { [champ]: '' });
+        redessinerChampsEvent();
+        break;
+      }
+      case 'event-champ-ajouter': {
+        const champ = bouton.dataset.champ;
+        state.event.champsCaches.delete(champ);
+        redessinerChampsEvent();
+        document.getElementById(champ === 'description' ? 'c-desc' : `c-${champ}`)?.focus();
         break;
       }
       case 'depense-ajouter': {
