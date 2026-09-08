@@ -412,16 +412,15 @@ function renderCompteLigne(compte) {
 /* -------------------------------------------------------- vue événement */
 
 const CHAMPS_EVENT = [
-  { champ: 'event_date', label: 'Date', input: 'date' },
-  { champ: 'location', label: 'Lieu', input: 'text' },
-  { champ: 'guests', label: 'Invités', input: 'number' }
+  { champ: 'event_date', label: 'Date', input: 'date', glyph: '📅', hint: 'Quand ça a lieu' },
+  { champ: 'location', label: 'Lieu', input: 'text', glyph: '📍', hint: 'Où ça se passe' },
+  { champ: 'guests', label: 'Invités', input: 'number', glyph: '👥', hint: 'Combien de personnes' }
 ];
+const CHAMP_DESCRIPTION = { champ: 'description', label: 'Description', glyph: '📝', hint: 'Notes libres' };
 
 function renderChampsEvent(evenement) {
   return CHAMPS_EVENT.map(({ champ, label, input }) => {
-    if (evenement.champsCaches.has(champ)) {
-      return `<button type="button" class="ajout-champ" data-action="event-champ-ajouter" data-champ="${champ}">+ ${label}</button>`;
-    }
+    if (evenement.champsCaches.has(champ)) return '';
     const valeur = champ === 'event_date' ? (evenement.event_date || '').slice(0, 10) : (evenement[champ] ?? '');
     return `
       <div>
@@ -436,9 +435,7 @@ function renderChampsEvent(evenement) {
 }
 
 function renderDescriptionEvent(evenement) {
-  if (evenement.champsCaches.has('description')) {
-    return `<button type="button" class="ajout-champ" data-action="event-champ-ajouter" data-champ="description">+ Description</button>`;
-  }
+  if (evenement.champsCaches.has('description')) return '';
   return `
     <div class="champ-event-tete">
       <label for="c-desc">Description</label>
@@ -447,9 +444,21 @@ function renderDescriptionEvent(evenement) {
     <textarea id="c-desc" data-save="event" data-field="description">${esc(evenement.description || '')}</textarea>`;
 }
 
+function renderChampsMasques(evenement) {
+  return [...CHAMPS_EVENT, CHAMP_DESCRIPTION]
+    .filter(c => evenement.champsCaches.has(c.champ))
+    .map(({ champ, label, glyph, hint }) => `
+      <button class="ajout-bloc" data-action="event-champ-ajouter" data-champ="${champ}">
+        <span>${glyph}</span>
+        <span style="font-size:14px">${label}<small>${hint}</small></span>
+      </button>`).join('');
+}
+
 function redessinerChampsEvent() {
   document.getElementById('champs-event').innerHTML = renderChampsEvent(state.event);
   document.getElementById('description-event').innerHTML = renderDescriptionEvent(state.event);
+  const zone = document.getElementById('champs-masques');
+  if (zone) zone.innerHTML = renderChampsMasques(state.event);
 }
 
 async function viewEvent(id) {
@@ -500,6 +509,7 @@ async function viewEvent(id) {
       ${estAdmin() ? `<aside class="panneau">
         <h2>Ajouter du contenu</h2>
         <p class="sous">Cliquez pour insérer un élément dans cet événement.</p>
+        <div id="champs-masques">${renderChampsMasques(evenement)}</div>
         ${Object.entries(BLOCK_TYPES).map(([type, def]) => `
           <button class="ajout-bloc" data-action="bloc-ajouter" data-type="${esc(type)}">
             <span>${def.glyph}</span>
