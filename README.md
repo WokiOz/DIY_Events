@@ -9,7 +9,7 @@ cp .env.example .env      # facultatif, des valeurs par défaut existent
 docker compose up -d --build
 ```
 
-Ouvrez ensuite **http://localhost:3000** (changez `APP_PORT` dans `.env` pour un autre port).
+Ouvrez ensuite **http://localhost:3000** (changez `APP_PORT` dans `.env` pour un autre port). Connectez-vous avec `helena` ou `elyan`, mot de passe temporaire identique à l'identifiant — un changement de mot de passe est demandé dès la première connexion.
 
 Pour arrêter : `docker compose down`. Les données et les fichiers envoyés survivent à l'arrêt (volumes `db-data` et `uploads`). Pour tout effacer : `docker compose down -v`.
 
@@ -19,7 +19,7 @@ Le projet est pensé pour une stack Portainer en mode **Repository** : Portainer
 
 Réglages à faire une fois, dans la stack :
 
-1. **Environment variables** — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT`.
+1. **Environment variables** — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT`, `SESSION_SECRET` (une valeur longue et aléatoire, ex. `openssl rand -hex 32` — quiconque la connaît peut fabriquer un cookie de connexion valide).
 2. **GitOps updates** → Mechanism **Polling**, intervalle 5 minutes. Suffisant pour un usage familial et n'exige aucun port ouvert sur la box. Le mode Webhook existe mais demande que Portainer soit joignable depuis Internet — à éviter sans solution comme Tailscale devant.
 
 Ensuite, déployer une modification se résume à `git push` : Portainer récupère et reconstruit tout seul.
@@ -67,6 +67,10 @@ Types de champs disponibles : `text`, `textarea`, `list`, `image`, `file`, `chec
 
 | Méthode | Route | Effet |
 |---|---|---|
+| POST | `/api/login`, `/api/logout` | se connecter, se déconnecter |
+| GET / POST | `/api/users` | (admin) lister, créer un compte lecture seule |
+| PATCH / DELETE | `/api/users/:id` | (admin) révoquer/réactiver, supprimer |
+| POST / DELETE | `/api/users/:id/permissions/:eventId` | (admin) accorder/retirer un événement |
 | GET / POST | `/api/tabs` | lister, créer un onglet |
 | PATCH / DELETE | `/api/tabs/:id` | modifier, supprimer |
 | GET | `/api/tabs/:id/themes` | thèmes d'un onglet |
@@ -84,6 +88,6 @@ Types de champs disponibles : `text`, `textarea`, `list`, `image`, `file`, `chec
 
 ## À savoir
 
-- L'application n'a **pas d'authentification** : gardez-la sur votre réseau local, ou placez un reverse proxy avec mot de passe devant si vous l'exposez sur Internet.
+- Connexion par identifiant et mot de passe. Deux comptes admin (`helena`, `elyan`) créés au premier démarrage avec un mot de passe temporaire égal à l'identifiant, à changer dès la première connexion. Les admins peuvent créer des comptes lecture seule pour le reste de la famille, révocables, et choisir événement par événement ce que chaque compte voit (page « Comptes », réservée aux admins).
 - Sauvegarde de la base : `docker compose exec db pg_dump -U evenements evenements > sauvegarde.sql`
 - Les fichiers envoyés sont limités à 50 Mo par fichier (`server/src/index.js`).

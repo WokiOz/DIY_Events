@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Application web auto-hébergée pour organiser des événements familiaux : onglets horizontaux → thèmes → événements → blocs de contenu, avec suivi du budget. Usage familial sur réseau local, un seul utilisateur, pas d'authentification.
+Application web auto-hébergée pour organiser des événements familiaux : onglets horizontaux → thèmes → événements → blocs de contenu, avec suivi du budget. Usage familial. Authentification par identifiant/mot de passe : deux comptes admin (accès complet) et des comptes lecture seule révocables, dont la visibilité se règle événement par événement.
 
 Lis `CONTEXTE-PROJET.md` avant toute modification non triviale : il contient le modèle de données complet, la liste des routes API et les pièges connus.
 
@@ -22,10 +22,12 @@ En production, la stack tourne dans Portainer en mode **Repository** : `git push
 
 ## Architecture
 
-- `server/src/index.js` — toutes les routes API dans un seul fichier. La route attrape-tout `app.get('*')` est en dernier : déclare toute nouvelle route API **avant** elle.
-- `server/src/db.js` — pool `pg`, `initDatabase()` attend que Postgres réponde avant de rejouer le schéma.
+- `server/src/index.js` — toutes les routes API dans un seul fichier. `app.use('/api', authentifier)` protège tout ce qui suit ; les routes d'écriture portent en plus `exigerAdmin`. La route attrape-tout `app.get('*')` est en dernier : déclare toute nouvelle route API **avant** elle.
+- `server/src/auth.js` — cookie de session signé (HMAC, `SESSION_SECRET`), middlewares `authentifier`/`exigerAdmin`.
+- `server/src/mots-de-passe.js` — hachage `scrypt` (`node:crypto`, pas de dépendance).
+- `server/src/db.js` — pool `pg`, `initDatabase()` attend que Postgres réponde, rejoue le schéma, puis crée les comptes admin `helena`/`elyan` si la table `users` est vide.
 - `server/src/schema.sql` — rejoué à chaque démarrage, doit rester idempotent (`IF NOT EXISTS`).
-- `server/public/app.js` — tout le front : routage par hash, `BLOCK_TYPES`, rendu, sauvegarde automatique.
+- `server/public/app.js` — tout le front : routage par hash, `BLOCK_TYPES`, rendu, sauvegarde automatique, écrans de connexion, panneau `#/comptes`.
 - `server/public/styles.css` — tokens CSS dans `:root`.
 
 ## Règles de code
@@ -38,10 +40,11 @@ En production, la stack tourne dans Portainer en mode **Repository** : `git push
 - Toute valeur venant de la base passe par `esc()` avant d'entrer dans une chaîne de gabarit.
 - Les clés de `debounce()` doivent être uniques par champ (`` `event-${field}` ``), sinon une sauvegarde en annule une autre.
 - Respecter les tokens CSS existants (`--pine`, `--ink`, `--surface`…), ne pas introduire de nouvelle palette.
+- Toute nouvelle route de mutation (POST/PATCH/DELETE) doit porter `exigerAdmin`. Toute nouvelle route de lecture doit filtrer pour un compte `lecture` via la table `permissions` (voir `/api/tabs`, `/api/themes/:id`, `/api/events/:id` dans `index.js` comme modèle), sinon un compte lecture seule verrait des données non autorisées.
 
 ## Vérifier son travail
 
-Après une modification du serveur ou de la base, lance `./scripts/smoke-test.sh` et corrige avant de rendre la main. Après une modification du front, vérifie au minimum qu'aucune erreur n'apparaît dans la console du navigateur. Ne déclare pas qu'une chose fonctionne sans l'avoir exécutée.
+Après une modification du serveur ou de la base, lance `./scripts/smoke-test.sh` et corrige avant de rendre la main. Le script se connecte lui-même (`SMOKE_USER`/`SMOKE_PASSWORD`, par défaut `helena`/`helena` — inutile en local si le mot de passe temporaire n'a pas été changé). Après une modification du front, vérifie au minimum qu'aucune erreur n'apparaît dans la console du navigateur. Ne déclare pas qu'une chose fonctionne sans l'avoir exécutée.
 
 ## Style de réponse
 

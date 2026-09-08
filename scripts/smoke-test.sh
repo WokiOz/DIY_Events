@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Vérifie que l'API répond correctement. Crée puis supprime des données de test.
 # Usage : ./scripts/smoke-test.sh [url]   (par défaut http://localhost:3000)
+# Identifiant admin utilisé pour se connecter : variables SMOKE_USER / SMOKE_PASSWORD
+# (par défaut helena / helena, le mot de passe temporaire d'une base fraîche).
 
 set -uo pipefail
 BASE="${1:-http://localhost:3000}"
+SMOKE_USER="${SMOKE_USER:-helena}"
+SMOKE_PASSWORD="${SMOKE_PASSWORD:-helena}"
+COOKIES=$(mktemp)
+trap 'rm -f "$COOKIES"' EXIT
 FAILED=0
 
 check() { # check "description" "attendu" "obtenu"
@@ -19,41 +25,73 @@ json() { # json "['clé']" < flux
   python3 -c "import sys,json;print(eval('d'+sys.argv[1],{'d':json.load(sys.stdin)}))" "$1" 2>/dev/null || echo "ERREUR"
 }
 
+cget()   { curl -s -b "$COOKIES" -c "$COOKIES" "$@"; }
+cpost()  { curl -s -b "$COOKIES" -c "$COOKIES" -X POST -H 'Content-Type: application/json' "$@"; }
+cpatch() { curl -s -b "$COOKIES" -c "$COOKIES" -X PATCH -H 'Content-Type: application/json' "$@"; }
+cdel()   { curl -s -b "$COOKIES" -c "$COOKIES" -X DELETE "$@"; }
+
 echo "Cible : $BASE"
 
 check "la page se charge" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")"
 check "app.js est servi"  "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/app.js")"
+check "API sans connexion refusée" "401" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/tabs")"
 
-TAB=$(curl -s -X POST "$BASE/api/tabs" -H 'Content-Type: application/json' -d '{"name":"ZZ test"}')
+LOGIN=$(cpost "$BASE/api/login" -d "{\"username\":\"$SMOKE_USER\",\"password\":\"$SMOKE_PASSWORD\"}")
+check "connexion admin ($SMOKE_USER)" "$SMOKE_USER" "$(echo "$LOGIN" | json "['username']")"
+
+TAB=$(cpost "$BASE/api/tabs" -d '{"name":"ZZ test"}')
 TAB_ID=$(echo "$TAB" | json "['id']")
 check "création d'un onglet" "ZZ test" "$(echo "$TAB" | json "['name']")"
 
-THEME=$(curl -s -X POST "$BASE/api/themes" -H 'Content-Type: application/json' -d "{\"tab_id\":$TAB_ID,\"name\":\"Thème test\"}")
+THEME=$(cpost "$BASE/api/themes" -d "{\"tab_id\":$TAB_ID,\"name\":\"Thème test\"}")
 THEME_ID=$(echo "$THEME" | json "['id']")
 check "création d'un thème" "Thème test" "$(echo "$THEME" | json "['name']")"
 
-EVENT=$(curl -s -X POST "$BASE/api/events" -H 'Content-Type: application/json' -d "{\"theme_id\":$THEME_ID,\"name\":\"Evenement ZZTEST\",\"budget\":1000}")
+EVENT=$(cpost "$BASE/api/events" -d "{\"theme_id\":$THEME_ID,\"name\":\"Evenement ZZTEST\",\"budget\":1000}")
 EVENT_ID=$(echo "$EVENT" | json "['id']")
 check "création d'un événement" "Evenement ZZTEST" "$(echo "$EVENT" | json "['name']")"
 
-curl -s -X PATCH "$BASE/api/events/$EVENT_ID" -H 'Content-Type: application/json' -d '{"location":"Salle test","guests":30}' >/dev/null
-check "modification partielle" "Salle test" "$(curl -s "$BASE/api/events/$EVENT_ID" | json "['location']")"
+cpatch "$BASE/api/events/$EVENT_ID" -d '{"location":"Salle test","guests":30}' >/dev/null
+check "modification partielle" "Salle test" "$(cget "$BASE/api/events/$EVENT_ID" | json "['location']")"
 
-curl -s -X POST "$BASE/api/events/$EVENT_ID/blocks" -H 'Content-Type: application/json' \
-  -d '{"type":"recette","title":"Gâteau","data":{"ingredients":["farine"]}}' >/dev/null
-check "ajout d'un bloc" "farine" "$(curl -s "$BASE/api/events/$EVENT_ID" | json "['blocks'][0]['data']['ingredients'][0]")"
+cpost "$BASE/api/events/$EVENT_ID/blocks" -d '{"type":"recette","title":"Gâteau","data":{"ingredients":["farine"]}}' >/dev/null
+check "ajout d'un bloc" "farine" "$(cget "$BASE/api/events/$EVENT_ID" | json "['blocks'][0]['data']['ingredients'][0]")"
 
-curl -s -X POST "$BASE/api/events/$EVENT_ID/expenses" -H 'Content-Type: application/json' -d '{"label":"Salle","amount":250}' >/dev/null
-check "ajout d'une dépense" "250" "$(curl -s "$BASE/api/events/$EVENT_ID" | json "['expenses'][0]['amount']")"
+cpost "$BASE/api/events/$EVENT_ID/expenses" -d '{"label":"Salle","amount":250}' >/dev/null
+check "ajout d'une dépense" "250" "$(cget "$BASE/api/events/$EVENT_ID" | json "['expenses'][0]['amount']")"
 
-check "recherche" "Evenement ZZTEST" "$(curl -s "$BASE/api/search?q=ZZTEST" | json "[0]['name']")"
+check "recherche" "Evenement ZZTEST" "$(cget "$BASE/api/search?q=ZZTEST" | json "[0]['name']")"
 
 echo test > /tmp/smoke-test-fichier.txt
-check "envoi de fichier" "smoke-test-fichier.txt" "$(curl -s -F file=@/tmp/smoke-test-fichier.txt "$BASE/api/upload" | json "['name']")"
+check "envoi de fichier" "smoke-test-fichier.txt" "$(curl -s -b "$COOKIES" -F file=@/tmp/smoke-test-fichier.txt "$BASE/api/upload" | json "['name']")"
 rm -f /tmp/smoke-test-fichier.txt
 
-curl -s -X DELETE "$BASE/api/tabs/$TAB_ID" >/dev/null
-check "suppression en cascade" "404" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/events/$EVENT_ID")"
+NOM_COMPTE="zztest$$"
+COMPTE=$(cpost "$BASE/api/users" -d "{\"username\":\"$NOM_COMPTE\",\"password\":\"zztest1234\"}")
+COMPTE_ID=$(echo "$COMPTE" | json "['id']")
+check "création d'un compte lecture seule" "$NOM_COMPTE" "$(echo "$COMPTE" | json "['username']")"
+
+LOGIN_LECTURE=$(curl -s -c /tmp/smoke-test-cookies-lecture -X POST -H 'Content-Type: application/json' \
+  "$BASE/api/login" -d "{\"username\":\"$NOM_COMPTE\",\"password\":\"zztest1234\"}")
+check "connexion du compte lecture seule" "lecture" "$(echo "$LOGIN_LECTURE" | json "['role']")"
+check "compte lecture seule : aucun événement visible avant permission" "[]" \
+  "$(curl -s -b /tmp/smoke-test-cookies-lecture "$BASE/api/tabs")"
+
+cpost "$BASE/api/users/$COMPTE_ID/permissions/$EVENT_ID" >/dev/null
+check "compte lecture seule : événement visible après permission" "200" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/smoke-test-cookies-lecture "$BASE/api/events/$EVENT_ID")"
+check "compte lecture seule : écriture refusée" "403" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/smoke-test-cookies-lecture -X PATCH -H 'Content-Type: application/json' \
+     "$BASE/api/events/$EVENT_ID" -d '{"name":"piraté"}')"
+
+cpatch "$BASE/api/users/$COMPTE_ID" -d '{"active":false}' >/dev/null
+check "révocation : session déjà ouverte coupée" "401" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/smoke-test-cookies-lecture "$BASE/api/tabs")"
+cdel "$BASE/api/users/$COMPTE_ID" >/dev/null
+rm -f /tmp/smoke-test-cookies-lecture
+
+cdel "$BASE/api/tabs/$TAB_ID" >/dev/null
+check "suppression en cascade" "404" "$(cget -o /dev/null -w '%{http_code}' "$BASE/api/events/$EVENT_ID")"
 
 echo
 [ $FAILED -eq 0 ] && echo "Tout est vert." || echo "Des vérifications ont échoué."

@@ -14,7 +14,7 @@ Onglet (« Fêtes de famille », « Voyages »)
         └── Blocs de contenu (note, image, recette, plan de déco, fichier 3D…)
 ```
 
-Usage familial, sur réseau local. Un seul utilisateur, pas de compte, pas de mot de passe. Tout s'enregistre automatiquement pendant la frappe, il n'y a aucun bouton « sauvegarder ».
+Usage familial. Deux comptes admin à accès complet (Hélèna, Elyan) et des comptes lecture seule créés à la demande, révocables, dont la visibilité se règle événement par événement (ex. 2 des 5 événements d'un thème). Tout s'enregistre automatiquement pendant la frappe, il n'y a aucun bouton « sauvegarder ».
 
 ## 2. Pile technique
 
@@ -26,7 +26,7 @@ Usage familial, sur réseau local. Un seul utilisateur, pas de compte, pas de mo
 | Fichiers | multer, volume Docker `uploads` | images et pièces jointes |
 | Orchestration | Docker Compose, 2 services | `db` et `app` |
 
-Dépendances npm volontairement limitées à `express`, `pg`, `multer`. Aucun framework front, aucun bundler, aucun TypeScript.
+Dépendances npm volontairement limitées à `express`, `pg`, `multer`. Aucun framework front, aucun bundler, aucun TypeScript. L'authentification (hachage `scrypt`, cookie de session signé par HMAC) n'ajoute aucune dépendance : tout vient de `node:crypto`.
 
 ## 3. Arborescence
 
@@ -40,12 +40,14 @@ mes-evenements/
     ├── package.json          "type": "module"
     ├── src/
     │   ├── index.js          API REST, upload, service des fichiers statiques
-    │   ├── db.js             pool pg, initDatabase() avec attente de la base
+    │   ├── auth.js           cookie de session signé, middlewares authentifier/exigerAdmin
+    │   ├── mots-de-passe.js  hachage/vérification scrypt (node:crypto)
+    │   ├── db.js             pool pg, initDatabase() avec attente de la base, comptes admin initiaux
     │   └── schema.sql        schéma + données d'exemple, rejoué à chaque démarrage
     └── public/
-        ├── index.html        coquille : topbar, rail d'onglets, <main>, <dialog>
+        ├── index.html        coquille : topbar, rail d'onglets, <main>, <dialog>, écrans de connexion
         ├── styles.css        tokens CSS et styles
-        └── app.js            toute la logique front
+        └── app.js            toute la logique front, y compris connexion et panneau #/comptes
 ```
 
 ## 4. Modèle de données
@@ -57,9 +59,14 @@ events    id, theme_id→themes, name, description, event_date, location,
           guests, budget, image_url, position, created_at
 blocks    id, event_id→events, type, title, data (JSONB), position, created_at
 expenses  id, event_id→events, label, amount, paid, position
+users       id, username, password_hash, role ('admin'|'lecture'), active,
+            must_change_password, token_version, created_at
+permissions user_id→users, event_id→events (clé primaire composite)
 ```
 
-Toutes les clés étrangères sont en `ON DELETE CASCADE` : supprimer un onglet supprime ses thèmes, événements, blocs et dépenses.
+Toutes les clés étrangères sont en `ON DELETE CASCADE` : supprimer un onglet supprime ses thèmes, événements, blocs et dépenses ; supprimer un événement supprime les lignes `permissions` qui le référencent ; supprimer un `user` supprime ses `permissions`.
+
+`token_version` sert à révoquer une session en direct : l'incrémenter (révocation, changement de mot de passe) invalide immédiatement tout cookie émis avant, sans attendre son expiration (180 jours).
 
 `blocks.data` contient le contenu libre en JSON, sa forme dépend de `blocks.type`. La clé réservée `__extras` stocke les champs personnalisés ajoutés par l'utilisateur : `[{ label, value }]`.
 
@@ -69,32 +76,49 @@ Toutes les clés étrangères sont en `ON DELETE CASCADE` : supprimer un onglet 
 
 Toutes les routes renvoient du JSON. Erreur → `{ error: "message en français" }`.
 
-| Méthode | Route | Effet |
-|---|---|---|
-| GET, POST | `/api/tabs` | lister, créer |
-| PATCH, DELETE | `/api/tabs/:id` | modifier, supprimer |
-| GET | `/api/tabs/:id/themes` | thèmes + `event_count` |
-| POST | `/api/themes` | créer (`tab_id` dans le corps) |
-| GET | `/api/themes/:id` | thème + `events[]` avec `spent` calculé |
-| PATCH, DELETE | `/api/themes/:id` | modifier, supprimer |
-| POST | `/api/events` | créer (`theme_id` dans le corps) |
-| GET | `/api/events/:id` | événement + `blocks[]` + `expenses[]` |
-| PATCH, DELETE | `/api/events/:id` | modifier, supprimer |
-| POST | `/api/events/:id/blocks` | ajouter un bloc |
-| PATCH, DELETE | `/api/blocks/:id` | modifier, supprimer |
-| POST | `/api/events/:id/expenses` | ajouter une dépense |
-| PATCH, DELETE | `/api/expenses/:id` | modifier, supprimer |
-| POST | `/api/upload` | `multipart/form-data`, champ `file` → `{ url, name, size }` |
-| POST | `/api/reorder` | `{ table, ids: [] }`, tables autorisées : tabs, themes, events, blocks |
-| GET | `/api/search?q=` | recherche d'événements, minimum 3 caractères |
+**Accès** : `/api/login` et `/api/logout` sont publiques, tout le reste de `/api` exige un cookie de session valide (`authentifier`), et les routes de mutation exigent en plus le rôle `admin` (`exigerAdmin`) → sinon 401 ou 403.
+
+| Méthode | Route | Accès | Effet |
+|---|---|---|---|
+| POST | `/api/login` | public | `{ username, password }` → pose le cookie, renvoie l'utilisateur |
+| POST | `/api/logout` | public | efface le cookie |
+| GET | `/api/me` | connecté | utilisateur courant |
+| POST | `/api/password` | connecté | change son propre mot de passe, réémet le cookie |
+| GET, POST | `/api/users` | admin | lister, créer un compte lecture seule |
+| PATCH | `/api/users/:id` | admin | `{ active }` : révoquer/réactiver (bascule `active`, incrémente `token_version` si révoqué) |
+| DELETE | `/api/users/:id` | admin | supprimer un compte lecture seule |
+| GET | `/api/users/:id/permissions` | admin | liste des `event_id` visibles |
+| POST, DELETE | `/api/users/:id/permissions/:eventId` | admin | accorder/retirer la visibilité d'un événement |
+| GET, POST | `/api/tabs` | connecté / admin | lister (filtré pour `lecture`), créer |
+| PATCH, DELETE | `/api/tabs/:id` | admin | modifier, supprimer |
+| GET | `/api/tabs/:id/themes` | connecté | thèmes + `event_count` (filtré pour `lecture`) |
+| POST | `/api/themes` | admin | créer (`tab_id` dans le corps) |
+| GET | `/api/themes/:id` | connecté | thème + `events[]` avec `spent` calculé (filtré pour `lecture`, 404 si aucun événement visible) |
+| PATCH, DELETE | `/api/themes/:id` | admin | modifier, supprimer |
+| POST | `/api/events` | admin | créer (`theme_id` dans le corps) |
+| GET | `/api/events/:id` | connecté | événement + `blocks[]` + `expenses[]` (404 si `lecture` sans permission) |
+| PATCH, DELETE | `/api/events/:id` | admin | modifier, supprimer |
+| POST | `/api/events/:id/blocks` | admin | ajouter un bloc |
+| PATCH, DELETE | `/api/blocks/:id` | admin | modifier, supprimer |
+| POST | `/api/events/:id/expenses` | admin | ajouter une dépense |
+| PATCH, DELETE | `/api/expenses/:id` | admin | modifier, supprimer |
+| POST | `/api/upload` | admin | `multipart/form-data`, champ `file` → `{ url, name, size }` |
+| POST | `/api/reorder` | admin | `{ table, ids: [] }`, tables autorisées : tabs, themes, events, blocks |
+| GET | `/api/search?q=` | connecté | recherche d'événements, minimum 3 caractères (filtré pour `lecture`) |
 
 Les PATCH sont partiels : seuls les champs présents dans le corps sont modifiés, via la fonction `patch(table, id, body, allowed)` qui n'accepte que les colonnes de la liste blanche. Ajouter une colonne modifiable impose donc de l'ajouter à cette liste.
 
+Le filtrage « lecture » n'est pas une liste blanche générique : chaque route filtrée a sa propre requête SQL jointe sur `permissions` (deux requêtes distinctes selon le rôle, voir `index.js`). Ajouter une route de lecture impose de refaire ce filtrage à la main.
+
 ## 6. Front-end
 
-**Routage** par hash, sans bibliothèque : `#/tab/:id`, `#/theme/:id`, `#/event/:id`. La fonction `route()` choisit la vue, chaque vue réécrit `#view` en entier.
+**Routage** par hash, sans bibliothèque : `#/tab/:id`, `#/theme/:id`, `#/event/:id`, `#/comptes` (admin uniquement, redirige sinon). La fonction `route()` choisit la vue, chaque vue réécrit `#view` en entier.
 
-**État** minimal : `state.tabs` et `state.event` (l'événement ouvert, avec ses blocs et dépenses). Le reste est rechargé depuis l'API à chaque navigation.
+**État** minimal : `state.tabs`, `state.event` (l'événement ouvert, avec ses blocs et dépenses) et `state.user` (utilisateur connecté). Le reste est rechargé depuis l'API à chaque navigation.
+
+**Connexion** : au chargement, `verifierSession()` appelle `GET /api/me` ; 401 → écran de connexion (`#ecran-connexion`), `must_change_password` → écran de changement obligatoire (`#ecran-mdp`), sinon `demarrerApplication()`. Ces deux écrans sont des `<div class="ecran-auth">` en `position: fixed` qui couvrent toute la page ; **attention** : `.ecran-auth` fixe `display: flex`, qui a la même spécificité CSS que `[hidden] { display: none }` du navigateur — une règle `.ecran-auth[hidden] { display: none; }` explicite est nécessaire, sinon l'écran masqué reste au-dessus et intercepte les clics.
+
+**Mode lecture seule** : `estAdmin()` teste `state.user.role`. Chaque vue (`viewTab`, `viewTheme`, `viewEvent`) omet directement dans le gabarit les blocs d'actions réservés aux admins, puis appelle `appliquerModeLecture()` en fin de rendu, qui retire tout `[data-action]` restant dans `#vue` et passe les champs en lecture seule (`readOnly`/`disabled`). Toute nouvelle action ajoutée à un gabarit hérite donc automatiquement de cette protection, à condition de garder l'attribut `data-action`.
 
 **Interactions** par délégation d'événements sur `document`, jamais de `onclick` inline :
 - clics : `data-action="…"` lu dans un gros `switch`, avec `data-id`, `data-key`, `data-type`, `data-index` ;
@@ -156,8 +180,11 @@ Principes : interface claire et calme, bordures fines plutôt qu'ombres, une seu
 - `event_date` revient de Postgres au format ISO complet ; le front fait `.slice(0, 10)` pour alimenter un `<input type="date">`.
 - Les colonnes `NUMERIC` reviennent en chaîne : les requêtes utilisent `::float` là où le front a besoin d'un nombre.
 - `app.get('*')` en fin de `index.js` renvoie `index.html` pour toute route inconnue ; toute nouvelle route API doit être déclarée **avant**.
-- Les fichiers envoyés vivent dans le volume `uploads`. Supprimer un bloc ne supprime pas le fichier associé.
+- Les fichiers envoyés vivent dans le volume `uploads`. Supprimer un bloc ne supprime pas le fichier associé. Ils sont servis sans vérification de permission (URL à nom aléatoire uniquement) : un compte lecture seule qui devine ou intercepte une URL de fichier peut y accéder même sans permission sur l'événement.
 - `docker compose down -v` efface la base et les fichiers. Sans `-v`, tout est conservé.
+- Dans le gestionnaire de clics `document.addEventListener('click', ...)`, `evenement.preventDefault()` n'est appelé que si `bouton.tagName !== 'INPUT'` : l'appeler sans condition annule le cochage natif d'une case `<input type="checkbox" data-action="…">` (le clic est annulé après coup, `bouton.checked` ne change jamais). Toute nouvelle case à cocher pilotée par `data-action` doit rester un `<input>` pour bénéficier de cette exception.
+- Changer `POSTGRES_PASSWORD` dans Portainer une fois le volume `db-data` déjà initialisé ne change pas le mot de passe réel de Postgres (l'image ne l'applique qu'à la création du volume). Il faut `ALTER USER … WITH PASSWORD …` dans le conteneur `db`, voir §10.
+- Le mot de passe temporaire des comptes admin (`helena`/`elyan` au premier démarrage) est identique à l'identifiant ; `must_change_password` force le changement côté front à la connexion, mais rien ne l'empêche côté API si on appelle directement `/api/events` etc. avant de changer le mot de passe — ce n'est pas un problème d'accès (le compte est déjà admin), seulement un oubli d'ergonomie à ne pas transformer en blocage strict sans le demander.
 
 ## 10. Commandes utiles
 
@@ -168,6 +195,10 @@ docker compose restart app       # redémarrer sans reconstruire
 docker compose down              # arrêter en gardant les données
 docker compose exec db psql -U evenements evenements    # ouvrir la base
 docker compose exec db pg_dump -U evenements evenements > sauvegarde.sql
+
+# Aligner le mot de passe réel de Postgres sur un POSTGRES_PASSWORD changé après coup
+docker exec -it <conteneur-db> psql -U evenements -d evenements \
+  -c "ALTER USER evenements WITH PASSWORD 'nouveau-mot-de-passe';"
 ```
 
 Modifier un fichier de `server/public/` ne demande qu'un rafraîchissement du navigateur si le dossier est monté en volume ; avec l'image telle qu'elle est construite ici, il faut relancer `up -d --build`.
@@ -176,7 +207,6 @@ Modifier un fichier de `server/public/` ne demande qu'un rafraîchissement du na
 
 Aucune n'est développée à ce jour :
 
-- page de connexion par mot de passe, indispensable avant toute exposition sur Internet ;
 - réordonnancement par glisser-déposer des onglets, thèmes et blocs (la route `/api/reorder` existe déjà, elle n'est pas utilisée par l'interface) ;
 - vue calendrier des événements à venir ;
 - export d'un événement en PDF ou en page imprimable ;

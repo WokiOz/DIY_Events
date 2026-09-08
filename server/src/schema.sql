@@ -49,10 +49,28 @@ CREATE TABLE IF NOT EXISTS expenses (
   position INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'lecture' CHECK (role IN ('admin', 'lecture')),
+  active BOOLEAN NOT NULL DEFAULT true,
+  must_change_password BOOLEAN NOT NULL DEFAULT false,
+  token_version INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, event_id)
+);
+
 CREATE INDEX IF NOT EXISTS themes_tab_id_idx ON themes(tab_id);
 CREATE INDEX IF NOT EXISTS events_theme_id_idx ON events(theme_id);
 CREATE INDEX IF NOT EXISTS blocks_event_id_idx ON blocks(event_id);
 CREATE INDEX IF NOT EXISTS expenses_event_id_idx ON expenses(event_id);
+CREATE INDEX IF NOT EXISTS permissions_event_id_idx ON permissions(event_id);
 
 INSERT INTO tabs (name, position)
 SELECT 'Fêtes de famille', 0
