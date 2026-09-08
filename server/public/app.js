@@ -167,6 +167,12 @@ const dateFr = valeur => valeur
 
 const vide = texte => `<p class="vide">${esc(texte)}</p>`;
 
+// photo de couverture (événement ou thème) : jamais rognée, fond flouté agrandi pour combler les bords
+const couvertureImg = url => url
+  ? `<img class="fond" src="${esc(url)}" alt="" aria-hidden="true">
+     <img class="photo" src="${esc(url)}" alt="">`
+  : '';
+
 const rail = document.getElementById('rail');
 const vue = document.getElementById('vue');
 const dialogue = document.getElementById('dialogue');
@@ -237,7 +243,7 @@ function choisirFichier(accept) {
 
 /* --------------------------------------------------------- recadreur photo */
 
-const RATIO_RECADRAGE = 3;
+const RATIO_RECADRAGE = 2.2;
 
 function ouvrirRecadreur(url, focusInitial) {
   return new Promise(resolve => {
@@ -271,7 +277,7 @@ function ouvrirRecadreur(url, focusInitial) {
     let cadre = null;
 
     const aides = {
-      focus: 'Clique sur la partie de la photo à garder visible dans la bannière comme dans les vignettes.',
+      focus: 'Clique sur la partie de la photo à mettre en avant dans la vignette de la grille (la bannière affiche toujours la photo entière).',
       crop: 'Déplace le cadre, agrandis-le par le coin, puis valide.'
     };
 
@@ -496,9 +502,7 @@ async function viewTheme(id) {
   vue.innerHTML = `
     <p class="fil"><a href="#/tab/${theme.tab_id}">← Retour</a></p>
     <div class="couverture">
-      ${theme.image_url
-        ? `<img src="${esc(theme.image_url)}" style="object-position:${esc(theme.image_focus || '50% 50%')}" alt="">`
-        : ''}
+      ${couvertureImg(theme.image_url)}
       ${estAdmin() ? `<div class="actions">
         <button class="btn-plat" data-action="theme-image" data-id="${theme.id}">${theme.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
         ${theme.image_url ? `<button class="btn-plat" data-action="theme-image-repositionner" data-id="${theme.id}">Cadrer</button>` : ''}
@@ -616,7 +620,7 @@ async function viewEvent(id) {
     <div class="event${estAdmin() ? '' : ' seule-colonne'}">
       <section>
         <div class="couverture">
-          ${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt="">` : ''}
+          ${couvertureImg(evenement.image_url)}
           ${estAdmin() ? `<div class="actions">
             <button class="btn-plat" data-action="event-image">${evenement.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
             ${evenement.image_url ? '<button class="btn-plat danger" data-action="event-image-retirer">Retirer</button>' : ''}
