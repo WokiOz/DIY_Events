@@ -471,6 +471,42 @@ dialog label { margin-bottom: 12px; }
   .topbar { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; }
   .recherche { order: 3; width: 100%; margin-left: 0; }
   .formulaire-compte { grid-template-columns: 1fr; }
+
+  /* la topbar peut passer sur 2 lignes ci-dessus : un rail collé à top:58px
+     se ferait recouvrir. On le laisse défiler avec la page. */
+  .rail { position: static; top: auto; }
+
+  .entete { flex-wrap: wrap; }
+  .entete-actions { margin-left: 0; width: 100%; }
+
+  .budget-tete { flex-wrap: wrap; }
+  .budget-tete input { width: 100px; }
+
+  .ligne-event { flex-wrap: wrap; row-gap: 4px; }
+  .ligne-event .argent { margin-left: 0; width: 100%; text-align: left; }
+
+  dialog { max-height: 88vh; overflow-y: auto; }
+}
+
+@media (max-width: 480px) {
+  .champs { grid-template-columns: 1fr; }
+}
+
+/* cibles tactiles plus grandes et pas de zoom iOS sur les champs de saisie */
+@media (pointer: coarse) {
+  input[type=text], input[type=password], input[type=date], input[type=number],
+  input[type=search], textarea, select {
+    font-size: 16px;
+  }
+  .onglet { padding: 13px 8px 11px; }
+  .icone { padding: 8px 10px; }
+  .depense input[type=checkbox],
+  .ligne-check input[type=checkbox],
+  .permissions-evenement input[type=checkbox] {
+    width: 20px;
+    height: 20px;
+  }
+  button, a, .onglet, .icone { touch-action: manipulation; }
 }
 
 @media (prefers-reduced-motion: reduce) {
