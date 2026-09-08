@@ -15,7 +15,7 @@ services:
       retries: 20
 
   app:
-    build: ./server
+    image: ghcr.io/wokioz/diy_events-app:latest
     restart: unless-stopped
     environment:
       PORT: 3000

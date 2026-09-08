@@ -1,0 +1,11 @@
+# Copiez ce fichier en docker-compose.override.yml (jamais commité, voir .gitignore).
+# docker-compose.yml ne fait plus que tirer l'image publiée par le workflow GitHub Actions ;
+# ce fichier reconstruit `app` en local à partir du Dockerfile et monte le code source
+# pour le rechargement à chaud décrit dans CLAUDE.md.
+services:
+  app:
+    build: ./server
+    command: node --watch src/index.js
+    volumes:
+      - ./server/src:/app/src
+      - ./server/public:/app/public

@@ -4,8 +4,11 @@ Application web conteneurisée pour organiser des événements : onglets horizon
 
 ## Démarrer
 
+`docker-compose.yml` tire l'image publiée sur ghcr.io ; pour construire en local il faut l'override qui rajoute `build:` :
+
 ```bash
 cp .env.example .env      # facultatif, des valeurs par défaut existent
+cp docker-compose.override.yml.example docker-compose.override.yml
 docker compose up -d --build
 ```
 
@@ -15,16 +18,18 @@ Pour arrêter : `docker compose down`. Les données et les fichiers envoyés sur
 
 ## Déploiement en production via Portainer
 
-Le projet est pensé pour une stack Portainer en mode **Repository** : Portainer clone le dépôt Git (donc le `Dockerfile` et `server/` sont disponibles pour la construction) et gère le cycle de vie des conteneurs.
+Le projet est pensé pour une stack Portainer en mode **Repository**. `docker-compose.yml` ne contient plus de `build:` : l'image `app` est construite par un workflow GitHub Actions (`.github/workflows/build-image.yml`) à chaque push sur `main` touchant `server/**`, publiée sur `ghcr.io/wokioz/diy_events-app:<sha du commit>`, puis le workflow committe lui-même la nouvelle référence dans `docker-compose.yml`. Portainer n'a donc plus qu'à tirer l'image taguée — il ne construit plus rien, donc plus de flakiness liée au cache de build.
 
-Réglages à faire une fois, dans la stack :
+Réglages à faire une fois :
 
-1. **Environment variables** — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT`, `SESSION_SECRET` (une valeur longue et aléatoire, ex. `openssl rand -hex 32` — quiconque la connaît peut fabriquer un cookie de connexion valide).
-2. **GitOps updates** → Mechanism **Polling**, intervalle 5 minutes. Suffisant pour un usage familial et n'exige aucun port ouvert sur la box. Le mode Webhook existe mais demande que Portainer soit joignable depuis Internet — à éviter sans solution comme Tailscale devant.
+1. Sur GitHub, dans **Settings → Actions → General → Workflow permissions**, cocher **Read and write permissions** : le workflow doit pouvoir committer la mise à jour de `docker-compose.yml`.
+2. Après le premier passage du workflow, dans **Packages** (github.com/WokiOz/DIY_Events), passer le package `diy_events-app` en **public** (le dépôt est public mais un package publié par un workflow est privé par défaut) — sinon Portainer doit avoir des identifiants ghcr.io configurés dans **Registries**.
+3. **Environment variables** de la stack — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT`, `SESSION_SECRET` (une valeur longue et aléatoire, ex. `openssl rand -hex 32` — quiconque la connaît peut fabriquer un cookie de connexion valide).
+4. **GitOps updates** → Mechanism **Polling**, intervalle 5 minutes. Suffisant pour un usage familial et n'exige aucun port ouvert sur la box. Le mode Webhook existe mais demande que Portainer soit joignable depuis Internet — à éviter sans solution comme Tailscale devant.
 
-Ensuite, déployer une modification se résume à `git push` : Portainer récupère et reconstruit tout seul.
+Ensuite, déployer une modification du serveur se résume à `git push` sur `main` : le workflow construit et publie l'image, committe le nouveau tag, et au poll suivant Portainer tire cette image.
 
-**Point de vigilance** : `docker-compose.override.yml` ne doit jamais être commité (il l'est dans `.gitignore`). Docker Compose le fusionne automatiquement s'il est présent, et il monte du code source absent sur le serveur — la stack casserait.
+**Point de vigilance** : `docker-compose.override.yml` ne doit jamais être commité (il l'est dans `.gitignore`). Docker Compose le fusionne automatiquement s'il est présent, et il rajoute `build:` + des volumes de code source absents sur le serveur — la stack casserait.
 
 Après un déploiement, vérifiez avec `./scripts/smoke-test.sh http://adresse-du-serveur:3000`.
 
