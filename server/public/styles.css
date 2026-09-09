@@ -393,6 +393,50 @@ dialog h2 { margin-bottom: 14px; }
 dialog label { margin-bottom: 12px; }
 .dialogue-actions { display: flex; flex-direction: row-reverse; justify-content: flex-start; gap: 8px; margin-top: 4px; }
 
+/* ------------------------------------------------------------- galerie */
+
+dialog.galerie { width: min(720px, 95vw); }
+
+.galerie-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+.galerie-vignette {
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0;
+  background: var(--surface);
+  cursor: pointer;
+}
+.galerie-vignette:hover { border-color: var(--pine); }
+.galerie-vignette img { width: 100%; height: 100%; object-fit: cover; }
+
+.galerie-outils { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.galerie-outils .spacer { flex: 1; }
+
+.galerie-image-zone {
+  max-height: 65vh;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+.galerie-image {
+  max-width: 100%;
+  max-height: 65vh;
+  transition: transform 0.15s;
+}
+
 /* ------------------------------------------------------------- compte */
 
 .compte { display: flex; align-items: center; gap: 10px; font-size: 14px; }
