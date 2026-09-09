@@ -27,7 +27,7 @@ const stockage = multer.diskStorage({
 const envoi = multer({ storage: stockage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 const COLONNES_EVENT =
-  'id, theme_id, name, description, event_date, location, guests, budget::float AS budget, image_url, position, created_at';
+  'id, theme_id, name, description, event_date, location, guests, budget::float AS budget, image_url, position, created_at, hidden_fields';
 const COLONNES_EXPENSE = 'id, event_id, label, amount::float AS amount, paid, position';
 const COLONNES_UTILISATEUR = 'id, username, role, active, must_change_password, created_at';
 const TABLES_ORDONNABLES = ['tabs', 'themes', 'events', 'blocks'];
@@ -319,7 +319,7 @@ app.get('/api/events/:id', a(async (req, res) => {
 app.patch('/api/events/:id', exigerAdmin, a(async (req, res) => {
   const evenement = await patch(
     'events', req.params.id, req.body,
-    ['name', 'description', 'event_date', 'location', 'guests', 'budget', 'image_url'],
+    ['name', 'description', 'event_date', 'location', 'guests', 'budget', 'image_url', 'hidden_fields'],
     COLONNES_EVENT
   );
   evenement ? res.json(evenement) : introuvable(res, 'Événement');
