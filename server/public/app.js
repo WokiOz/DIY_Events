@@ -142,7 +142,7 @@ function renderCompte() {
 
 function appliquerModeLecture() {
   if (estAdmin()) return;
-  document.querySelectorAll('#vue [data-action]').forEach(el => el.remove());
+  document.querySelectorAll('#vue [data-action]:not([data-lecture-ok])').forEach(el => el.remove());
   document.querySelectorAll('#vue input, #vue textarea, #vue select').forEach(el => {
     if (el.type === 'checkbox' || el.type === 'radio') el.disabled = true;
     else el.readOnly = true;
@@ -475,10 +475,98 @@ function redessinerChampsEvent() {
   if (zone) zone.innerHTML = renderChampsMasques(state.event);
 }
 
+// toutes les photos d'un événement : la couverture, et chaque champ image renseigné dans ses blocs
+function imagesDeEvenement(evenement) {
+  const images = [];
+  if (evenement.image_url) images.push(evenement.image_url);
+  for (const bloc of evenement.blocks) {
+    for (const champ of (BLOCK_TYPES[bloc.type]?.fields || [])) {
+      if (champ.type === 'image' && bloc.data?.[champ.key]) images.push(bloc.data[champ.key]);
+    }
+  }
+  return images;
+}
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+
+function ouvrirGalerie(images) {
+  let index = 0;
+  let zoom = 1;
+  dialogue.classList.add('galerie');
+  dialogueForm.innerHTML = `
+    <h2>Photos</h2>
+    <div class="galerie-grille" data-vue="grille">
+      ${images.map((url, i) => `
+        <button type="button" class="galerie-vignette" data-index="${i}"><img src="${esc(url)}" alt=""></button>`).join('')}
+    </div>
+    <div class="galerie-agrandi" data-vue="agrandi" hidden>
+      <div class="galerie-outils">
+        <button type="button" class="icone" data-role="grille">← Toutes les photos</button>
+        <span class="spacer"></span>
+        <button type="button" class="icone" data-role="zoom-moins" title="Réduire">−</button>
+        <button type="button" class="icone" data-role="zoom-plus" title="Agrandir">+</button>
+        ${images.length > 1 ? `
+          <button type="button" class="icone" data-role="precedent" title="Photo précédente">‹</button>
+          <button type="button" class="icone" data-role="suivant" title="Photo suivante">›</button>` : ''}
+      </div>
+      <div class="galerie-image-zone">
+        <img class="galerie-image" alt="">
+      </div>
+    </div>
+    <div class="dialogue-actions">
+      <button class="btn-plat" value="fermer">Fermer</button>
+    </div>`;
+
+  const vueGrille = dialogueForm.querySelector('[data-vue="grille"]');
+  const vueAgrandi = dialogueForm.querySelector('[data-vue="agrandi"]');
+  const imgAgrandi = dialogueForm.querySelector('.galerie-image');
+
+  function appliquerZoom() { imgAgrandi.style.transform = `scale(${zoom})`; }
+
+  function afficherAgrandi() {
+    zoom = 1;
+    imgAgrandi.src = images[index];
+    appliquerZoom();
+    vueGrille.hidden = true;
+    vueAgrandi.hidden = false;
+  }
+
+  dialogueForm.querySelectorAll('.galerie-vignette').forEach(bouton => {
+    bouton.addEventListener('click', () => { index = Number(bouton.dataset.index); afficherAgrandi(); });
+  });
+  dialogueForm.querySelector('[data-role="grille"]').addEventListener('click', () => {
+    vueAgrandi.hidden = true;
+    vueGrille.hidden = false;
+  });
+  dialogueForm.querySelector('[data-role="precedent"]')?.addEventListener('click', () => {
+    index = (index - 1 + images.length) % images.length;
+    afficherAgrandi();
+  });
+  dialogueForm.querySelector('[data-role="suivant"]')?.addEventListener('click', () => {
+    index = (index + 1) % images.length;
+    afficherAgrandi();
+  });
+  dialogueForm.querySelector('[data-role="zoom-plus"]').addEventListener('click', () => {
+    zoom = Math.min(ZOOM_MAX, zoom + 0.25);
+    appliquerZoom();
+  });
+  dialogueForm.querySelector('[data-role="zoom-moins"]').addEventListener('click', () => {
+    zoom = Math.max(ZOOM_MIN, zoom - 0.25);
+    appliquerZoom();
+  });
+
+  if (images.length === 1) afficherAgrandi();
+
+  dialogue.addEventListener('close', () => dialogue.classList.remove('galerie'), { once: true });
+  dialogue.showModal();
+}
+
 async function viewEvent(id) {
   const evenement = await get(`/api/events/${id}`);
   evenement.champsCaches = new Set();
   state.event = evenement;
+  const images = imagesDeEvenement(evenement);
   renderTabs(evenement.theme?.tab_id);
   vue.innerHTML = `
     <p class="fil"><a href="#/theme/${evenement.theme_id}">← ${esc(evenement.theme?.name || 'Retour')}</a></p>
@@ -491,6 +579,8 @@ async function viewEvent(id) {
             ${evenement.image_url ? '<button class="btn-plat danger" data-action="event-image-retirer">Retirer</button>' : ''}
           </div>` : ''}
         </div>
+        ${images.length ? `<button type="button" class="btn-plat" data-action="event-galerie" data-lecture-ok style="margin-bottom:16px">
+          🖼️ Voir les photos (${images.length})</button>` : ''}
 
         <div class="bloc-papier">
           <input class="titre-event" type="text" data-save="event" data-field="name"
@@ -765,6 +855,10 @@ document.addEventListener('click', async evenement => {
       case 'event-image-retirer': {
         await patch(`/api/events/${state.event.id}`, { image_url: '' });
         route();
+        break;
+      }
+      case 'event-galerie': {
+        ouvrirGalerie(imagesDeEvenement(state.event));
         break;
       }
       case 'event-champ-retirer': {
