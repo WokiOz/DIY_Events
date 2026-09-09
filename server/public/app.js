@@ -564,7 +564,7 @@ function ouvrirGalerie(images) {
 
 async function viewEvent(id) {
   const evenement = await get(`/api/events/${id}`);
-  evenement.champsCaches = new Set();
+  evenement.champsCaches = new Set(evenement.hidden_fields || []);
   state.event = evenement;
   const images = imagesDeEvenement(evenement);
   renderTabs(evenement.theme?.tab_id);
@@ -865,13 +865,14 @@ document.addEventListener('click', async evenement => {
         const champ = bouton.dataset.champ;
         state.event.champsCaches.add(champ);
         state.event[champ] = champ === 'guests' ? null : '';
-        await patch(`/api/events/${state.event.id}`, { [champ]: '' });
+        await patch(`/api/events/${state.event.id}`, { [champ]: '', hidden_fields: [...state.event.champsCaches] });
         redessinerChampsEvent();
         break;
       }
       case 'event-champ-ajouter': {
         const champ = bouton.dataset.champ;
         state.event.champsCaches.delete(champ);
+        await patch(`/api/events/${state.event.id}`, { hidden_fields: [...state.event.champsCaches] });
         redessinerChampsEvent();
         document.getElementById(champ === 'description' ? 'c-desc' : `c-${champ}`)?.focus();
         break;
