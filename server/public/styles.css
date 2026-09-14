@@ -306,6 +306,7 @@ input.titre-event:hover { border-color: transparent; }
 .block[data-type="deco"]    { border-top-color: #7a5ea8; }
 .block[data-type="print3d"] { border-top-color: #2b6f8f; }
 .block[data-type="lien"]    { border-top-color: #3c8f6a; }
+.block[data-type="renvoi"]  { border-top-color: var(--gold); }
 
 .block > header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .block .glyph { font-size: 17px; }
@@ -350,6 +351,30 @@ input.titre-event:hover { border-color: transparent; }
   margin-bottom: 6px;
 }
 .fichier a { color: var(--pine); font-weight: 500; }
+
+.renvoi-vide {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+.renvoi-chargement, .renvoi-introuvable { color: var(--ink-soft); font-size: 13.5px; margin: 0; }
+.renvoi-carte { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.renvoi-tete { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.renvoi-vignette {
+  width: 44px; height: 44px; border-radius: 7px; flex: none; overflow: hidden;
+  background: var(--pine-tint); color: var(--pine); font-size: 19px;
+  display: flex; align-items: center; justify-content: center;
+}
+.renvoi-vignette img { width: 100%; height: 100%; object-fit: cover; }
+.renvoi-badge { display: block; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--gold); margin-bottom: 3px; }
+.renvoi-nom { font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 600; font-size: 15px; }
+.renvoi-meta { padding: 10px 12px 0; font-size: 13px; color: var(--ink-soft); }
+.renvoi-pied { padding: 8px 12px 12px; }
+.renvoi-lien { color: var(--pine); font-weight: 600; font-size: 13.5px; }
+.renvoi-lien:hover { text-decoration: underline; }
 
 /* -------------------------------------------------------------- panneau */
 
@@ -397,6 +422,25 @@ dialog::backdrop { background: rgba(22, 33, 29, 0.35); }
 dialog h2 { margin-bottom: 14px; }
 dialog label { margin-bottom: 12px; }
 .dialogue-actions { display: flex; flex-direction: row-reverse; justify-content: flex-start; gap: 8px; margin-top: 4px; }
+
+.aide-recherche { font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 10px; }
+.recherche-resultats { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; margin-bottom: 4px; }
+.recherche-resultat {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.recherche-resultat:hover { border-color: var(--pine); background: var(--pine-tint); }
+.recherche-resultat .badge { display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; color: var(--gold); }
+.recherche-resultat .nom { font-size: 14px; font-weight: 500; }
+.recherche-vide { font-size: 13.5px; color: var(--ink-soft); padding: 10px 2px; text-align: center; margin: 0; }
 
 /* ------------------------------------------------------------- galerie */
 
