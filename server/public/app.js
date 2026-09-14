@@ -72,6 +72,10 @@ const BLOCK_TYPES = {
       { key: 'url', label: 'Adresse', type: 'text' },
       { key: 'notes', label: 'Pourquoi ce lien', type: 'textarea' }
     ]
+  },
+  renvoi: {
+    label: 'Élément lié', glyph: '🔁', hint: 'Réutiliser une recette, un prestataire d’un autre événement',
+    fields: [{ key: 'event_id', label: 'Événement lié', type: 'renvoi' }]
   }
 };
 
@@ -215,6 +219,72 @@ function demander(titre, champs) {
     dialogue.showModal();
     dialogueForm.querySelector('input, textarea')?.focus();
   });
+}
+
+function choisirEvenementLie() {
+  return new Promise(resolve => {
+    let choisi = null;
+    dialogueForm.innerHTML = `
+      <h2>Lier un événement</h2>
+      <p class="sous">Cherchez par nom — la recette, le thème ou le prestataire à réutiliser ici.</p>
+      <input type="search" id="champ-recherche-lien" autocomplete="off" placeholder="Tarte, traiteur…">
+      <p class="aide-recherche">Tapez au moins 3 lettres.</p>
+      <div class="recherche-resultats" id="resultats-lien"></div>
+      <div class="dialogue-actions">
+        <button class="btn-plat" value="annuler">Annuler</button>
+      </div>`;
+    const champ = dialogueForm.querySelector('#champ-recherche-lien');
+    const zone = dialogueForm.querySelector('#resultats-lien');
+
+    champ.addEventListener('input', () => {
+      const q = champ.value.trim();
+      if (q.length < 3) { zone.innerHTML = ''; return; }
+      debounce('recherche-lien', async () => {
+        const trouves = await get(`/api/search?q=${encodeURIComponent(q)}`).catch(() => []);
+        zone.innerHTML = trouves.length
+          ? trouves.map((e, i) => `
+            <button type="button" class="recherche-resultat" data-index="${i}">
+              <span class="badge">${esc(e.theme_name)}</span>
+              <span class="nom">${esc(e.name)}</span>
+            </button>`).join('')
+          : '<p class="recherche-vide">Aucun événement ne correspond.</p>';
+        zone.querySelectorAll('.recherche-resultat').forEach(bouton => {
+          bouton.addEventListener('click', () => {
+            choisi = trouves[Number(bouton.dataset.index)];
+            dialogue.close('ok');
+          });
+        });
+      }, 250);
+    });
+
+    dialogue.returnValue = '';
+    dialogue.addEventListener('close', () => resolve(dialogue.returnValue === 'ok' ? choisi : null), { once: true });
+    dialogue.showModal();
+    champ.focus();
+  });
+}
+
+async function chargerApercusRenvoi() {
+  for (const noeud of document.querySelectorAll('.renvoi-carte[data-renvoi-vers]')) {
+    const eventId = noeud.dataset.renvoiVers;
+    try {
+      const cible = await get(`/api/events/${eventId}`);
+      const infos = [dateFr(cible.event_date), cible.location, cible.guests ? `${cible.guests} invités` : '']
+        .filter(Boolean).join(' · ');
+      noeud.innerHTML = `
+        <div class="renvoi-tete">
+          <div class="renvoi-vignette">${cible.image_url ? `<img src="${esc(cible.image_url)}" alt="">` : '✦'}</div>
+          <div>
+            <div class="renvoi-badge">${esc(cible.theme?.name || '')}</div>
+            <div class="renvoi-nom">${esc(cible.name)}</div>
+          </div>
+        </div>
+        ${infos ? `<div class="renvoi-meta">${esc(infos)}</div>` : ''}
+        <div class="renvoi-pied"><a class="renvoi-lien" href="#/event/${cible.id}">Voir l’événement complet →</a></div>`;
+    } catch {
+      noeud.innerHTML = `<p class="renvoi-introuvable">Cet événement n’est plus accessible.</p>`;
+    }
+  }
 }
 
 async function envoyerFichier(fichier, nom) {
@@ -638,6 +708,7 @@ async function viewEvent(id) {
     </div>`;
   majBudget();
   appliquerModeLecture();
+  chargerApercusRenvoi();
 }
 
 /* -------------------------------------------------------------- dépenses */
@@ -744,6 +815,11 @@ function renderBlockField(bloc, champ) {
         </div>` : ''}
         <button class="btn-plat" data-action="bloc-images-ajouter" ${ref}>+ Ajouter des images</button></div>`;
     }
+
+    case 'renvoi':
+      return valeur
+        ? `<div class="champ renvoi-carte" data-renvoi-vers="${esc(valeur)}"><p class="renvoi-chargement">Chargement…</p></div>`
+        : `<p class="renvoi-vide">Cliquez sur « Élément lié » pour choisir l’événement à réutiliser.</p>`;
 
     case 'file':
       return `<div class="champ"><label>${esc(champ.label)}</label>
@@ -933,10 +1009,17 @@ document.addEventListener('click', async evenement => {
         break;
       }
       case 'bloc-ajouter': {
-        const nouveau = await post(`/api/events/${state.event.id}/blocks`, { type, data: {} });
+        let data = {};
+        if (type === 'renvoi') {
+          const choisi = await choisirEvenementLie();
+          if (!choisi) return;
+          data = { event_id: choisi.id };
+        }
+        const nouveau = await post(`/api/events/${state.event.id}/blocks`, { type, data });
         state.event.blocks.push(nouveau);
         document.getElementById('blocs').insertAdjacentHTML('beforeend', renderBlock(nouveau));
         document.querySelector(`.block[data-id="${nouveau.id}"]`).scrollIntoView({ block: 'center' });
+        if (type === 'renvoi') chargerApercusRenvoi();
         break;
       }
       case 'bloc-supprimer': {
