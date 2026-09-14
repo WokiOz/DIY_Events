@@ -15,7 +15,7 @@ services:
       retries: 20
 
   app:
-    image: ghcr.io/wokioz/diy_events-app:6627acf1e5d56427f77bf5c5b6cd7c92f895ecd7
+    image: ghcr.io/wokioz/diy_events-app:c2265f15a15dddda2b8a94d917a2b99a6e9bfa0b
     restart: unless-stopped
     environment:
       PORT: 3000
