@@ -352,13 +352,19 @@ function ouvrirRecadrage({ imageUrl, focus, ratioApercu, largeurApercu }) {
   });
 }
 
-async function envoyerFichier(fichier, nom) {
+async function envoyerFichier(fichier, nom, { silencieux = false } = {}) {
   const formulaire = new FormData();
   formulaire.append('file', fichier, nom);
-  const reponse = await fetch('/api/upload', { method: 'POST', body: formulaire });
+  let reponse;
+  try {
+    reponse = await fetch('/api/upload', { method: 'POST', body: formulaire });
+  } catch {
+    if (!silencieux) alert('L’envoi du fichier a échoué (connexion interrompue).');
+    return null;
+  }
   const donnees = await reponse.json().catch(() => null);
   if (!reponse.ok) {
-    alert(donnees?.error || 'L’envoi du fichier a échoué.');
+    if (!silencieux) alert(donnees?.error || 'L’envoi du fichier a échoué.');
     return null;
   }
   return donnees;
@@ -1250,12 +1256,16 @@ document.addEventListener('click', async evenement => {
           bloc.data[key] = bloc.data.image ? [bloc.data.image] : [];
           delete bloc.data.image;
         }
+        // envoi et sauvegarde au fur et à mesure : une photo qui échoue plus
+        // loin dans le lot (réseau coupé) n'efface pas celles déjà envoyées
+        let echecs = 0;
         for (const fichier of fichiers) {
-          const televerse = await envoyerFichier(fichier, fichier.name);
-          if (televerse?.url) bloc.data[key].push(televerse.url);
+          const televerse = await envoyerFichier(fichier, fichier.name, { silencieux: true });
+          if (televerse?.url) { bloc.data[key].push(televerse.url); sauverBloc(id); }
+          else echecs++;
         }
-        sauverBloc(id);
         redrawBlock(id);
+        if (echecs) alert(`${echecs} photo${echecs > 1 ? 's n’ont' : ' n’a'} pas pu être envoyée${echecs > 1 ? 's' : ''}, réessayez.`);
         break;
       }
       case 'bloc-image-retirer': {
