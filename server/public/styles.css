@@ -138,7 +138,6 @@ img { max-width: 100%; display: block; }
 
 /* --------------------------------------------------- filtre par labels */
 
-.filtre-labels-conteneur { position: relative; }
 .bouton-filtre {
   display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px;
   border-radius: var(--radius); border: 1px solid var(--line); background: var(--paper);
@@ -147,8 +146,12 @@ img { max-width: 100%; display: block; }
 .bouton-filtre:hover, .bouton-filtre.actif { border-color: var(--pine); color: var(--pine); }
 .compte-filtre { background: var(--pine); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 6px; line-height: 1.4; }
 
+/* ancré sur .topbar (position: sticky, donc conteneur de positionnement des
+   descendants absolus) plutôt que sur .filtre-labels-conteneur : le bouton
+   n'est pas forcément collé au bord droit (la topbar peut passer sur deux
+   lignes en mobile), alors que .topbar l'est toujours grâce à son padding. */
 .panneau-filtre {
-  position: absolute; top: 44px; right: 0; width: min(360px, 92vw);
+  position: absolute; top: 100%; right: 0; margin-top: 8px; width: min(360px, 92vw);
   background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(22, 33, 29, .12); padding: 16px; z-index: 30;
 }
