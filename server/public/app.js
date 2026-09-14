@@ -431,6 +431,7 @@ const CHAMPS_EVENT = [
   { champ: 'guests', label: 'Invités', input: 'number', glyph: '👥', hint: 'Combien de personnes' }
 ];
 const CHAMP_DESCRIPTION = { champ: 'description', label: 'Description', glyph: '📝', hint: 'Notes libres' };
+const CHAMP_BUDGET = { champ: 'budget', label: 'Budget', glyph: '💰', hint: 'Suivi des dépenses' };
 
 function renderChampsEvent(evenement) {
   return CHAMPS_EVENT.map(({ champ, label, input }) => {
@@ -459,7 +460,7 @@ function renderDescriptionEvent(evenement) {
 }
 
 function renderChampsMasques(evenement) {
-  return [...CHAMPS_EVENT, CHAMP_DESCRIPTION]
+  return [...CHAMPS_EVENT, CHAMP_DESCRIPTION, CHAMP_BUDGET]
     .filter(c => evenement.champsCaches.has(c.champ))
     .map(({ champ, label, glyph, hint }) => `
       <button class="ajout-bloc" data-action="event-champ-ajouter" data-champ="${champ}">
@@ -592,12 +593,14 @@ async function viewEvent(id) {
           </div>` : ''}
         </div>
 
+        ${evenement.champsCaches.has('budget') ? '' : `
         <div class="bloc-papier">
           <div class="budget-tete">
             <h2>Budget</h2>
             <label for="c-budget" style="margin:0">Prévu</label>
             <input id="c-budget" type="number" min="0" step="0.01" data-save="event" data-field="budget"
                    value="${esc(evenement.budget ?? '')}">
+            <button type="button" class="icone" data-action="event-champ-retirer" data-champ="budget" title="Retirer le budget">✕</button>
           </div>
           <div id="jauge"></div>
           <div id="depenses">${evenement.expenses.map(renderExpense).join('')}</div>
@@ -605,7 +608,7 @@ async function viewEvent(id) {
             <button class="btn-plat" data-action="depense-ajouter">+ Ligne de dépense</button>
           </div>` : ''}
           <div class="resume" id="resume"></div>
-        </div>
+        </div>`}
 
         <div class="blocs" id="blocs">${evenement.blocks.map(renderBlock).join('')}</div>
       </section>
@@ -864,8 +867,12 @@ document.addEventListener('click', async evenement => {
       case 'event-champ-retirer': {
         const champ = bouton.dataset.champ;
         state.event.champsCaches.add(champ);
-        state.event[champ] = champ === 'guests' ? null : '';
-        await patch(`/api/events/${state.event.id}`, { [champ]: '', hidden_fields: [...state.event.champsCaches] });
+        if (champ !== 'budget') state.event[champ] = champ === 'guests' ? null : '';
+        await patch(`/api/events/${state.event.id}`, {
+          ...(champ === 'budget' ? {} : { [champ]: '' }),
+          hidden_fields: [...state.event.champsCaches]
+        });
+        if (champ === 'budget') { route(); break; }
         redessinerChampsEvent();
         break;
       }
@@ -873,6 +880,7 @@ document.addEventListener('click', async evenement => {
         const champ = bouton.dataset.champ;
         state.event.champsCaches.delete(champ);
         await patch(`/api/events/${state.event.id}`, { hidden_fields: [...state.event.champsCaches] });
+        if (champ === 'budget') { route(); break; }
         redessinerChampsEvent();
         document.getElementById(champ === 'description' ? 'c-desc' : `c-${champ}`)?.focus();
         break;
