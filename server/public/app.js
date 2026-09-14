@@ -427,6 +427,9 @@ function carteEvent(evenement) {
         <h3>${esc(evenement.name)}</h3>
         ${infos ? `<p>${esc(infos)}</p>` : ''}
         ${budget ? `<p class="${depense > budget ? 'depasse' : 'compte'}">${argent(depense)} sur ${argent(budget)}</p>` : ''}
+        ${evenement.labels?.length ? `<div class="labels-rangee">
+          ${evenement.labels.map(l => `<span class="label-chip">${esc(l)}</span>`).join('')}
+        </div>` : ''}
       </div>
     </a>`;
 }
@@ -540,6 +543,58 @@ function renderDescriptionEvent(evenement) {
     <textarea id="c-desc" data-save="event" data-field="description">${esc(evenement.description || '')}</textarea>`;
 }
 
+function renderLabelsEvent(evenement) {
+  const labels = evenement.labels || [];
+  return `
+    <div class="labels-champ">
+      <label>Labels</label>
+      <div class="labels-rangee">
+        ${labels.map(l => `
+          <span class="label-chip">${esc(l)}<button type="button" data-action="label-retirer" data-label="${esc(l)}" title="Retirer">✕</button></span>`).join('')}
+        ${estAdmin() ? `<span class="label-ajout">
+          <input type="text" id="champ-nouveau-label" placeholder="+ Ajouter" autocomplete="off">
+          <span class="label-suggestions" id="suggestions-label"></span>
+        </span>` : ''}
+      </div>
+    </div>`;
+}
+
+function redessinerLabelsEvent() {
+  const zone = document.getElementById('zone-labels-event');
+  if (zone) zone.innerHTML = renderLabelsEvent(state.event);
+}
+
+async function ajouterLabel(nom) {
+  nom = nom.trim();
+  if (!nom || (state.event.labels || []).includes(nom)) return;
+  state.event.labels = [...(state.event.labels || []), nom];
+  if (!state.labelsConnus.includes(nom)) state.labelsConnus = [...state.labelsConnus, nom].sort((a, b) => a.localeCompare(b));
+  await patch(`/api/events/${state.event.id}`, { labels: state.event.labels });
+  redessinerLabelsEvent();
+}
+
+async function retirerLabel(nom) {
+  state.event.labels = (state.event.labels || []).filter(l => l !== nom);
+  await patch(`/api/events/${state.event.id}`, { labels: state.event.labels });
+  redessinerLabelsEvent();
+}
+
+function afficherSuggestionsLabel() {
+  const champ = document.getElementById('champ-nouveau-label');
+  const suggestions = document.getElementById('suggestions-label');
+  if (!champ || !suggestions) return;
+  const saisie = champ.value.trim();
+  const q = saisie.toLowerCase();
+  const deja = new Set(state.event.labels || []);
+  const correspond = (state.labelsConnus || []).filter(l => !deja.has(l) && (!q || l.toLowerCase().includes(q)));
+  let html = correspond.map(l => `<button type="button" data-action="label-ajouter" data-label="${esc(l)}">${esc(l)}</button>`).join('');
+  if (saisie && !state.labelsConnus.some(l => l.toLowerCase() === q) && !deja.has(saisie)) {
+    html += `<button type="button" class="creer" data-action="label-ajouter" data-label="${esc(saisie)}">Créer « ${esc(saisie)} »</button>`;
+  }
+  suggestions.innerHTML = html || '<p>Tous les labels sont déjà posés</p>';
+  suggestions.classList.add('ouvert');
+}
+
 function renderChampsMasques(evenement) {
   return [...CHAMPS_EVENT, CHAMP_DESCRIPTION, CHAMP_BUDGET]
     .filter(c => evenement.champsCaches.has(c.champ))
@@ -646,9 +701,13 @@ function ouvrirGalerie(images) {
 }
 
 async function viewEvent(id) {
-  const evenement = await get(`/api/events/${id}`);
+  const [evenement, labelsConnus] = await Promise.all([
+    get(`/api/events/${id}`),
+    get('/api/labels').catch(() => [])
+  ]);
   evenement.champsCaches = new Set(evenement.hidden_fields || []);
   state.event = evenement;
+  state.labelsConnus = labelsConnus;
   const images = imagesDeEvenement(evenement);
   renderTabs(evenement.theme?.tab_id);
   vue.innerHTML = `
@@ -668,6 +727,7 @@ async function viewEvent(id) {
         <div class="bloc-papier">
           <input class="titre-event" type="text" data-save="event" data-field="name"
                  value="${esc(evenement.name)}" placeholder="Nom de l’événement">
+          <div id="zone-labels-event">${renderLabelsEvent(evenement)}</div>
           <div class="champs" id="champs-event">${renderChampsEvent(evenement)}</div>
           <div id="description-event">${renderDescriptionEvent(evenement)}</div>
           ${estAdmin() ? `<div class="entete-actions" style="margin-top:12px">
@@ -993,6 +1053,17 @@ document.addEventListener('click', async evenement => {
         document.getElementById(champ === 'description' ? 'c-desc' : `c-${champ}`)?.focus();
         break;
       }
+      case 'label-retirer': {
+        await retirerLabel(bouton.dataset.label);
+        break;
+      }
+      case 'label-ajouter': {
+        await ajouterLabel(bouton.dataset.label);
+        const champ = document.getElementById('champ-nouveau-label');
+        if (champ) { champ.value = ''; champ.focus(); }
+        document.getElementById('suggestions-label')?.classList.remove('ouvert');
+        break;
+      }
       case 'depense-ajouter': {
         const depense = await post(`/api/events/${state.event.id}/expenses`, { label: '', amount: 0 });
         state.event.expenses.push(depense);
@@ -1250,6 +1321,86 @@ document.addEventListener('click', evenement => {
 resultats.addEventListener('click', () => {
   champRecherche.value = '';
   resultats.hidden = true;
+});
+
+/* -------------------------------------------------------- filtre labels */
+
+const boutonFiltreLabels = document.getElementById('bouton-filtre-labels');
+const panneauFiltreLabels = document.getElementById('panneau-filtre-labels');
+const compteFiltreLabels = document.getElementById('compte-filtre-labels');
+const zoneFiltreLabels = document.getElementById('filtre-labels');
+const zoneFiltreResultats = document.getElementById('filtre-resultats');
+const labelsActifs = new Set();
+let labelsFiltreCharges = false;
+
+async function actualiserFiltreLabels() {
+  compteFiltreLabels.hidden = labelsActifs.size === 0;
+  compteFiltreLabels.textContent = labelsActifs.size;
+  boutonFiltreLabels.classList.toggle('actif', labelsActifs.size > 0);
+  if (!labelsActifs.size) {
+    zoneFiltreResultats.innerHTML = '<p class="filtre-vide">Choisissez un ou plusieurs labels ci-dessus.</p>';
+    return;
+  }
+  const trouves = await get(`/api/search?labels=${encodeURIComponent([...labelsActifs].join(','))}`).catch(() => []);
+  if (!trouves.length) {
+    zoneFiltreResultats.innerHTML = '<p class="filtre-vide">Aucun événement avec tous ces labels.</p>';
+    return;
+  }
+  const parTheme = {};
+  for (const e of trouves) (parTheme[e.theme_name] ??= []).push(e);
+  zoneFiltreResultats.innerHTML = Object.entries(parTheme).map(([theme, evs]) => `
+    <div class="theme-nom">${esc(theme)}</div>
+    ${evs.map(e => `<a class="evenement" href="#/event/${e.id}">${esc(e.name)}</a>`).join('')}`).join('');
+}
+
+boutonFiltreLabels.addEventListener('click', async () => {
+  panneauFiltreLabels.hidden = !panneauFiltreLabels.hidden;
+  if (panneauFiltreLabels.hidden) return;
+  if (!labelsFiltreCharges) {
+    const tous = await get('/api/labels').catch(() => []);
+    zoneFiltreLabels.innerHTML = tous.length
+      ? tous.map(l => `<button type="button" class="filtre-chip" data-label="${esc(l)}">${esc(l)}</button>`).join('')
+      : '<p class="filtre-vide">Aucun label pour l’instant.</p>';
+    zoneFiltreLabels.querySelectorAll('.filtre-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const l = chip.dataset.label;
+        labelsActifs.has(l) ? labelsActifs.delete(l) : labelsActifs.add(l);
+        chip.classList.toggle('actif');
+        actualiserFiltreLabels();
+      });
+    });
+    labelsFiltreCharges = true;
+  }
+  actualiserFiltreLabels();
+});
+
+document.addEventListener('click', evenement => {
+  if (!evenement.target.closest('.filtre-labels-conteneur')) panneauFiltreLabels.hidden = true;
+});
+
+zoneFiltreResultats.addEventListener('click', evenement => {
+  if (evenement.target.closest('a')) panneauFiltreLabels.hidden = true;
+});
+
+/* --------------------------------------------------- labels d'un événement */
+
+document.addEventListener('focusin', evenement => {
+  if (evenement.target.id === 'champ-nouveau-label') afficherSuggestionsLabel();
+});
+document.addEventListener('input', evenement => {
+  if (evenement.target.id === 'champ-nouveau-label') afficherSuggestionsLabel();
+});
+document.addEventListener('keydown', evenement => {
+  if (evenement.target.id !== 'champ-nouveau-label' || evenement.key !== 'Enter') return;
+  const saisie = evenement.target.value.trim();
+  if (!saisie) return;
+  evenement.preventDefault();
+  ajouterLabel(saisie);
+  evenement.target.value = '';
+  document.getElementById('suggestions-label')?.classList.remove('ouvert');
+});
+document.addEventListener('click', evenement => {
+  if (!evenement.target.closest('.label-ajout')) document.getElementById('suggestions-label')?.classList.remove('ouvert');
 });
 
 /* ------------------------------------------------------------ formulaires d'accès */
