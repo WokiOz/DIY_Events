@@ -6,7 +6,7 @@ const BLOCK_TYPES = {
   image: {
     label: 'Image', glyph: '🖼️', hint: 'Photo ou inspiration',
     fields: [
-      { key: 'image', label: 'Image', type: 'image' },
+      { key: 'images', label: 'Images', type: 'images' },
       { key: 'legende', label: 'Légende', type: 'text' }
     ]
   },
@@ -239,6 +239,17 @@ function choisirFichier(accept) {
       if (!fichier) return resolve(null);
       envoyerFichier(fichier, fichier.name).then(resolve);
     };
+    input.click();
+  });
+}
+
+function choisirFichiers(accept) {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    if (accept) input.accept = accept;
+    input.onchange = () => resolve([...input.files]);
     input.click();
   });
 }
@@ -483,6 +494,7 @@ function imagesDeEvenement(evenement) {
   for (const bloc of evenement.blocks) {
     for (const champ of (BLOCK_TYPES[bloc.type]?.fields || [])) {
       if (champ.type === 'image' && bloc.data?.[champ.key]) images.push(bloc.data[champ.key]);
+      if (champ.type === 'images') images.push(...imagesDuChampMulti(bloc, champ));
     }
   }
   return images;
@@ -695,6 +707,13 @@ function renderBlock(bloc) {
     </article>`;
 }
 
+function imagesDuChampMulti(bloc, champ) {
+  const valeur = bloc.data?.[champ.key];
+  if (Array.isArray(valeur)) return valeur;
+  if (bloc.data?.image) return [bloc.data.image]; // migration depuis l’ancien champ « image » unique
+  return [];
+}
+
 function renderBlockField(bloc, champ) {
   const valeur = bloc.data?.[champ.key];
   const ref = `data-id="${bloc.id}" data-key="${esc(champ.key)}"`;
@@ -712,6 +731,19 @@ function renderBlockField(bloc, champ) {
         ${valeur ? `<div class="apercu"><img src="${esc(valeur)}" alt=""></div>` : ''}
         <button class="btn-plat" data-action="bloc-image" ${ref}>${valeur ? 'Changer l’image' : 'Choisir une image'}</button>
         ${valeur ? `<button class="icone danger" data-action="bloc-vider" ${ref}>Retirer</button>` : ''}</div>`;
+
+    case 'images': {
+      const images = imagesDuChampMulti(bloc, champ);
+      return `<div class="champ"><label>${esc(champ.label)}</label>
+        ${images.length ? `<div class="apercu-multi">
+          ${images.map((url, i) => `
+            <div class="apercu-multi-item">
+              <img src="${esc(url)}" alt="">
+              <button class="icone danger" data-action="bloc-image-retirer" ${ref} data-index="${i}" title="Retirer">✕</button>
+            </div>`).join('')}
+        </div>` : ''}
+        <button class="btn-plat" data-action="bloc-images-ajouter" ${ref}>+ Ajouter des images</button></div>`;
+    }
 
     case 'file':
       return `<div class="champ"><label>${esc(champ.label)}</label>
@@ -918,6 +950,31 @@ document.addEventListener('click', async evenement => {
         const fichier = await choisirFichier('image/*');
         if (!fichier) return;
         bloc.data[key] = fichier.url;
+        sauverBloc(id);
+        redrawBlock(id);
+        break;
+      }
+      case 'bloc-images-ajouter': {
+        const fichiers = await choisirFichiers('image/*');
+        if (!fichiers.length) return;
+        if (!Array.isArray(bloc.data[key])) {
+          bloc.data[key] = bloc.data.image ? [bloc.data.image] : [];
+          delete bloc.data.image;
+        }
+        for (const fichier of fichiers) {
+          const televerse = await envoyerFichier(fichier, fichier.name);
+          if (televerse) bloc.data[key].push(televerse.url);
+        }
+        sauverBloc(id);
+        redrawBlock(id);
+        break;
+      }
+      case 'bloc-image-retirer': {
+        if (!Array.isArray(bloc.data[key])) {
+          bloc.data[key] = bloc.data.image ? [bloc.data.image] : [];
+          delete bloc.data.image;
+        }
+        bloc.data[key].splice(Number(index), 1);
         sauverBloc(id);
         redrawBlock(id);
         break;
