@@ -743,14 +743,29 @@ function ouvrirGalerie(images) {
     vueAgrandi.hidden = true;
     vueGrille.hidden = false;
   });
-  dialogueForm.querySelector('[data-role="precedent"]')?.addEventListener('click', () => {
+  function allerPrecedent() {
     index = (index - 1 + images.length) % images.length;
     afficherAgrandi();
-  });
-  dialogueForm.querySelector('[data-role="suivant"]')?.addEventListener('click', () => {
+  }
+  function allerSuivant() {
     index = (index + 1) % images.length;
     afficherAgrandi();
-  });
+  }
+  dialogueForm.querySelector('[data-role="precedent"]')?.addEventListener('click', allerPrecedent);
+  dialogueForm.querySelector('[data-role="suivant"]')?.addEventListener('click', allerSuivant);
+
+  if (images.length > 1) {
+    const zoneImage = dialogueForm.querySelector('.galerie-image-zone');
+    let depart = null;
+    zoneImage.addEventListener('touchstart', e => { depart = e.touches[0].clientX; }, { passive: true });
+    zoneImage.addEventListener('touchend', e => {
+      if (depart === null) return;
+      const delta = e.changedTouches[0].clientX - depart;
+      depart = null;
+      if (Math.abs(delta) < 40) return;
+      delta > 0 ? allerPrecedent() : allerSuivant();
+    });
+  }
   dialogueForm.querySelector('[data-role="zoom-plus"]').addEventListener('click', () => {
     zoom = Math.min(ZOOM_MAX, zoom + 0.25);
     appliquerZoom();
@@ -774,6 +789,7 @@ async function viewEvent(id) {
   evenement.champsCaches = new Set(evenement.hidden_fields || []);
   state.event = evenement;
   state.labelsConnus = labelsConnus;
+  await normaliserImagesEvenement(evenement);
   const images = imagesDeEvenement(evenement);
   renderTabs(evenement.theme?.tab_id);
   vue.innerHTML = `
@@ -910,6 +926,24 @@ function imagesDuChampMulti(bloc, champ) {
   if (Array.isArray(valeur)) return valeur;
   if (bloc.data?.image) return [bloc.data.image]; // migration depuis l’ancien champ « image » unique
   return [];
+}
+
+// corrige les blocs « images » dont le tableau contient une entrée vide (ex. un
+// envoi de fichier interrompu par une coupure réseau) et termine la migration
+// des blocs encore sur l’ancien champ « image » unique — une fois pour toutes.
+async function normaliserImagesEvenement(evenement) {
+  for (const bloc of evenement.blocks) {
+    for (const champ of (BLOCK_TYPES[bloc.type]?.fields || [])) {
+      if (champ.type !== 'images') continue;
+      const brut = imagesDuChampMulti(bloc, champ);
+      const nettoye = brut.filter(Boolean);
+      const propre = Array.isArray(bloc.data[champ.key]) && nettoye.length === brut.length && !('image' in bloc.data);
+      if (propre) continue;
+      bloc.data[champ.key] = nettoye;
+      delete bloc.data.image;
+      if (estAdmin()) await patch(`/api/blocks/${bloc.id}`, { data: bloc.data }).catch(() => {});
+    }
+  }
 }
 
 function renderBlockField(bloc, champ) {
@@ -1203,7 +1237,7 @@ document.addEventListener('click', async evenement => {
         }
         for (const fichier of fichiers) {
           const televerse = await envoyerFichier(fichier, fichier.name);
-          if (televerse) bloc.data[key].push(televerse.url);
+          if (televerse?.url) bloc.data[key].push(televerse.url);
         }
         sauverBloc(id);
         redrawBlock(id);
