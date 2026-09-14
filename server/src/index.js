@@ -275,8 +275,8 @@ app.post('/api/events', exigerAdmin, a(async (req, res) => {
   if (!req.body.theme_id) return res.status(400).json({ error: 'Thème manquant' });
   if (!nom) return res.status(400).json({ error: 'Le nom est obligatoire' });
   const { rows } = await pool.query(
-    `INSERT INTO events (theme_id, name, event_date, location, guests, budget, position)
-     VALUES ($1, $2, $3, $4, $5, $6,
+    `INSERT INTO events (theme_id, name, event_date, location, guests, budget, hidden_fields, position)
+     VALUES ($1, $2, $3, $4, $5, $6, $7,
              (SELECT COALESCE(MAX(position), -1) + 1 FROM events WHERE theme_id = $1))
      RETURNING ${COLONNES_EVENT}`,
     [
@@ -285,7 +285,8 @@ app.post('/api/events', exigerAdmin, a(async (req, res) => {
       req.body.event_date || null,
       req.body.location || null,
       req.body.guests || null,
-      req.body.budget ?? null
+      req.body.budget ?? null,
+      ['budget']
     ]
   );
   res.status(201).json(rows[0]);
