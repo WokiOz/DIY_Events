@@ -702,7 +702,7 @@ function ouvrirGalerie(images) {
     <h2>Photos</h2>
     <div class="galerie-grille" data-vue="grille">
       ${images.map((url, i) => `
-        <button type="button" class="galerie-vignette" data-index="${i}"><img src="${esc(url)}" alt=""></button>`).join('')}
+        <button type="button" class="galerie-vignette" data-index="${i}"><img src="${esc(url)}" alt="" loading="lazy"></button>`).join('')}
     </div>
     <div class="galerie-agrandi" data-vue="agrandi" hidden>
       <div class="galerie-outils">
@@ -970,7 +970,7 @@ function renderBlockField(bloc, champ) {
         ${images.length ? `<div class="apercu-multi">
           ${images.map((url, i) => `
             <div class="apercu-multi-item">
-              <img src="${esc(url)}" alt="">
+              <img src="${esc(url)}" alt="" loading="lazy">
               <button class="icone danger" data-action="bloc-image-retirer" ${ref} data-index="${i}" title="Retirer">✕</button>
             </div>`).join('')}
         </div>` : ''}
@@ -1022,6 +1022,21 @@ function sauverBloc(id) {
 }
 
 const signaler = erreur => alert(erreur.message || 'Une erreur est survenue.');
+
+// une photo qui échoue à charger (fichier supprimé du serveur, coupure réseau…)
+// reste sinon vide indéfiniment ; on la remplace par un repère visible plutôt
+// que de laisser un carré blanc. « error » sur <img> ne remonte pas (bubble),
+// d'où la capture.
+document.addEventListener('error', evenement => {
+  const img = evenement.target;
+  if (img.tagName !== 'IMG' || img.dataset.indisponible) return;
+  img.dataset.indisponible = '1';
+  const repere = document.createElement('span');
+  repere.className = 'image-indisponible';
+  repere.title = 'Photo indisponible';
+  repere.textContent = '🖼️';
+  img.replaceWith(repere);
+}, true);
 
 /* ------------------------------------------------------------- actions */
 
