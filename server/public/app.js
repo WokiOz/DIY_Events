@@ -287,6 +287,71 @@ async function chargerApercusRenvoi() {
   }
 }
 
+function focusVersPourcentages(focus) {
+  const m = /^(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/.exec(focus || '');
+  return m ? { x: Number(m[1]), y: Number(m[2]) } : { x: 50, y: 50 };
+}
+
+// pas de recadrage destructif : on choisit juste le point à garder visible
+// (object-position), la photo d'origine n'est jamais retouchée.
+function ouvrirRecadrage({ imageUrl, focus, ratioApercu, largeurApercu }) {
+  return new Promise(resolve => {
+    let position = focusVersPourcentages(focus);
+    dialogueForm.innerHTML = `
+      <h2>Recadrer la photo</h2>
+      <p class="sous">Cliquez (ou glissez) sur la photo pour choisir la partie à garder visible.</p>
+      <div class="recadrage-zone" id="zone-recadrage" style="background-image:url('${esc(imageUrl)}')">
+        <div class="recadrage-marqueur" id="marqueur-recadrage"></div>
+      </div>
+      <div class="recadrage-previsu">
+        <div class="cadre-apercu" id="apercu-recadrage"
+             style="background-image:url('${esc(imageUrl)}'); aspect-ratio:${ratioApercu}; width:${largeurApercu}px"></div>
+        <span class="legende">Aperçu tel qu’affiché sur le site</span>
+      </div>
+      <div class="dialogue-actions">
+        <button class="btn" type="button" id="valider-recadrage">Enregistrer</button>
+        <button class="btn-plat" value="annuler">Annuler</button>
+      </div>`;
+
+    const zone = dialogueForm.querySelector('#zone-recadrage');
+    const marqueur = dialogueForm.querySelector('#marqueur-recadrage');
+    const apercu = dialogueForm.querySelector('#apercu-recadrage');
+
+    function actualiser() {
+      marqueur.style.left = position.x + '%';
+      marqueur.style.top = position.y + '%';
+      apercu.style.backgroundPosition = `${position.x}% ${position.y}%`;
+    }
+    function depuisEvenement(e) {
+      const rect = zone.getBoundingClientRect();
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      position = {
+        x: Math.max(0, Math.min(100, Math.round((cx / rect.width) * 100))),
+        y: Math.max(0, Math.min(100, Math.round((cy / rect.height) * 100)))
+      };
+      actualiser();
+    }
+    let enGlissement = false;
+    const surPointerUp = () => { enGlissement = false; };
+    zone.addEventListener('pointerdown', e => { enGlissement = true; depuisEvenement(e); });
+    zone.addEventListener('pointermove', e => { if (enGlissement) depuisEvenement(e); });
+    window.addEventListener('pointerup', surPointerUp);
+    actualiser();
+
+    dialogueForm.querySelector('#valider-recadrage').addEventListener('click', () => {
+      dialogue.close(`${position.x}% ${position.y}%`);
+    });
+
+    dialogue.returnValue = '';
+    dialogue.addEventListener('close', () => {
+      window.removeEventListener('pointerup', surPointerUp);
+      resolve(dialogue.returnValue && dialogue.returnValue !== 'annuler' ? dialogue.returnValue : null);
+    }, { once: true });
+    dialogue.showModal();
+  });
+}
+
 async function envoyerFichier(fichier, nom) {
   const formulaire = new FormData();
   formulaire.append('file', fichier, nom);
@@ -382,7 +447,7 @@ async function viewTab(id) {
 
 const carteTheme = theme => `
   <a class="carte" href="#/theme/${theme.id}">
-    <div class="visuel">${theme.image_url ? `<img src="${esc(theme.image_url)}" alt="">` : '✦'}</div>
+    <div class="visuel">${theme.image_url ? `<img src="${esc(theme.image_url)}" alt=""${theme.image_focus ? ` style="object-position:${esc(theme.image_focus)}"` : ''}>` : '✦'}</div>
     <div class="corps">
       <h3>${esc(theme.name)}</h3>
       ${theme.description ? `<p>${esc(theme.description)}</p>` : ''}
@@ -404,6 +469,7 @@ async function viewTheme(id) {
       </div>
       ${estAdmin() ? `<div class="entete-actions">
         <button class="btn-plat" data-action="theme-image" data-id="${theme.id}">${theme.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+        ${theme.image_url ? `<button class="btn-plat" data-action="theme-image-recadrer" data-id="${theme.id}">🎯 Recadrer</button>` : ''}
         ${theme.image_url ? `<button class="btn-plat danger" data-action="theme-image-retirer" data-id="${theme.id}">Retirer la photo</button>` : ''}
         <button class="btn-plat" data-action="theme-modifier" data-id="${theme.id}">Modifier le thème</button>
         <button class="btn-plat danger" data-action="theme-supprimer" data-id="${theme.id}">Supprimer le thème</button>
@@ -422,7 +488,7 @@ function carteEvent(evenement) {
     .filter(Boolean).join(' · ');
   return `
     <a class="carte" href="#/event/${evenement.id}">
-      <div class="visuel">${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt="">` : '✦'}</div>
+      <div class="visuel">${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt=""${evenement.image_focus ? ` style="object-position:${esc(evenement.image_focus)}"` : ''}>` : '✦'}</div>
       <div class="corps">
         <h3>${esc(evenement.name)}</h3>
         ${infos ? `<p>${esc(infos)}</p>` : ''}
@@ -715,9 +781,10 @@ async function viewEvent(id) {
     <div class="event${estAdmin() ? '' : ' seule-colonne'}">
       <section>
         <div class="couverture">
-          ${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt="">` : ''}
+          ${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt=""${evenement.image_focus ? ` style="object-position:${esc(evenement.image_focus)}"` : ''}>` : ''}
           ${estAdmin() ? `<div class="actions">
             <button class="btn-plat" data-action="event-image">${evenement.image_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+            ${evenement.image_url ? '<button class="btn-plat" data-action="event-image-recadrer">🎯 Recadrer</button>' : ''}
             ${evenement.image_url ? '<button class="btn-plat danger" data-action="event-image-retirer">Retirer</button>' : ''}
           </div>` : ''}
         </div>
@@ -971,12 +1038,22 @@ document.addEventListener('click', async evenement => {
       case 'theme-image': {
         const fichier = await choisirFichier('image/*');
         if (!fichier) return;
-        await patch(`/api/themes/${id}`, { image_url: fichier.url });
+        await patch(`/api/themes/${id}`, { image_url: fichier.url, image_focus: '' });
         route();
         break;
       }
       case 'theme-image-retirer': {
-        await patch(`/api/themes/${id}`, { image_url: '' });
+        await patch(`/api/themes/${id}`, { image_url: '', image_focus: '' });
+        route();
+        break;
+      }
+      case 'theme-image-recadrer': {
+        const theme = await get(`/api/themes/${id}`);
+        const focus = await ouvrirRecadrage({
+          imageUrl: theme.image_url, focus: theme.image_focus, ratioApercu: '2 / 1', largeurApercu: 200
+        });
+        if (!focus) return;
+        await patch(`/api/themes/${id}`, { image_focus: focus });
         route();
         break;
       }
@@ -1019,12 +1096,21 @@ document.addEventListener('click', async evenement => {
       case 'event-image': {
         const fichier = await choisirFichier('image/*');
         if (!fichier) return;
-        await patch(`/api/events/${state.event.id}`, { image_url: fichier.url });
+        await patch(`/api/events/${state.event.id}`, { image_url: fichier.url, image_focus: '' });
         route();
         break;
       }
       case 'event-image-retirer': {
-        await patch(`/api/events/${state.event.id}`, { image_url: '' });
+        await patch(`/api/events/${state.event.id}`, { image_url: '', image_focus: '' });
+        route();
+        break;
+      }
+      case 'event-image-recadrer': {
+        const focus = await ouvrirRecadrage({
+          imageUrl: state.event.image_url, focus: state.event.image_focus, ratioApercu: '3 / 1', largeurApercu: 210
+        });
+        if (!focus) return;
+        await patch(`/api/events/${state.event.id}`, { image_focus: focus });
         route();
         break;
       }
