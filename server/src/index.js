@@ -373,6 +373,10 @@ app.delete('/api/expenses/:id', exigerAdmin, a((req, res) => supprimer('expenses
 
 app.post('/api/upload', exigerAdmin, envoi.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+  if (!req.file.size) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'Le fichier envoyé est vide (envoi interrompu ?)' });
+  }
   const nom = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
   res.json({ url: `/uploads/${req.file.filename}`, name: nom, size: req.file.size });
 });
