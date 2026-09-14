@@ -27,7 +27,7 @@ const stockage = multer.diskStorage({
 const envoi = multer({ storage: stockage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 const COLONNES_EVENT =
-  'id, theme_id, name, description, event_date, location, guests, budget::float AS budget, image_url, position, created_at, hidden_fields';
+  'id, theme_id, name, description, event_date, location, guests, budget::float AS budget, image_url, position, created_at, hidden_fields, labels';
 const COLONNES_EXPENSE = 'id, event_id, label, amount::float AS amount, paid, position';
 const COLONNES_UTILISATEUR = 'id, username, role, active, must_change_password, created_at';
 const TABLES_ORDONNABLES = ['tabs', 'themes', 'events', 'blocks'];
@@ -320,7 +320,7 @@ app.get('/api/events/:id', a(async (req, res) => {
 app.patch('/api/events/:id', exigerAdmin, a(async (req, res) => {
   const evenement = await patch(
     'events', req.params.id, req.body,
-    ['name', 'description', 'event_date', 'location', 'guests', 'budget', 'image_url', 'hidden_fields'],
+    ['name', 'description', 'event_date', 'location', 'guests', 'budget', 'image_url', 'hidden_fields', 'labels'],
     COLONNES_EVENT
   );
   evenement ? res.json(evenement) : introuvable(res, 'Événement');
@@ -399,28 +399,47 @@ app.post('/api/reorder', exigerAdmin, a(async (req, res) => {
 
 app.get('/api/search', a(async (req, res) => {
   const q = (req.query.q || '').trim();
-  if (q.length < 3) return res.json([]);
-  const { rows } = estAdmin(req)
-    ? await pool.query(
-        `SELECT e.id, e.name, e.event_date, e.location,
-                t.id AS theme_id, t.name AS theme_name, t.tab_id
-         FROM events e JOIN themes t ON t.id = e.theme_id
-         WHERE e.name ILIKE $1 OR e.location ILIKE $1 OR e.description ILIKE $1
-         ORDER BY e.event_date DESC NULLS LAST, e.name
-         LIMIT 20`,
-        [`%${q}%`]
-      )
-    : await pool.query(
-        `SELECT e.id, e.name, e.event_date, e.location,
-                t.id AS theme_id, t.name AS theme_name, t.tab_id
-         FROM events e JOIN themes t ON t.id = e.theme_id
-         JOIN permissions p ON p.event_id = e.id AND p.user_id = $2
-         WHERE e.name ILIKE $1 OR e.location ILIKE $1 OR e.description ILIKE $1
-         ORDER BY e.event_date DESC NULLS LAST, e.name
-         LIMIT 20`,
-        [`%${q}%`, req.user.id]
-      );
+  const labels = (req.query.labels || '').split(',').map(l => l.trim()).filter(Boolean);
+  if (q.length < 3 && !labels.length) return res.json([]);
+
+  const valeurs = [];
+  const conditions = [];
+  if (q.length >= 3) {
+    valeurs.push(`%${q}%`);
+    conditions.push(`(e.name ILIKE $${valeurs.length} OR e.location ILIKE $${valeurs.length} OR e.description ILIKE $${valeurs.length})`);
+  }
+  if (labels.length) {
+    valeurs.push(labels);
+    conditions.push(`e.labels @> $${valeurs.length}::text[]`);
+  }
+  if (!estAdmin(req)) {
+    valeurs.push(req.user.id);
+    conditions.push(`p.user_id = $${valeurs.length}`);
+  }
+  const { rows } = await pool.query(
+    `SELECT e.id, e.name, e.event_date, e.location, e.labels,
+            t.id AS theme_id, t.name AS theme_name, t.tab_id
+     FROM events e
+     JOIN themes t ON t.id = e.theme_id
+     ${estAdmin(req) ? '' : 'JOIN permissions p ON p.event_id = e.id'}
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY e.event_date DESC NULLS LAST, e.name
+     LIMIT 20`,
+    valeurs
+  );
   res.json(rows);
+}));
+
+app.get('/api/labels', a(async (req, res) => {
+  const { rows } = estAdmin(req)
+    ? await pool.query('SELECT DISTINCT unnest(labels) AS label FROM events ORDER BY label')
+    : await pool.query(
+        `SELECT DISTINCT unnest(e.labels) AS label
+         FROM events e JOIN permissions p ON p.event_id = e.id AND p.user_id = $1
+         ORDER BY label`,
+        [req.user.id]
+      );
+  res.json(rows.map(r => r.label));
 }));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Route inconnue' }));

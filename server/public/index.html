@@ -42,6 +42,15 @@
       <input type="search" id="recherche" placeholder="Rechercher un événement" autocomplete="off" aria-label="Rechercher un événement">
       <div class="resultats" id="resultats" hidden></div>
     </div>
+    <div class="filtre-labels-conteneur">
+      <button class="bouton-filtre" id="bouton-filtre-labels" type="button">🏷️ Labels <span class="compte-filtre" id="compte-filtre-labels" hidden>0</span></button>
+      <div class="panneau-filtre" id="panneau-filtre-labels" hidden>
+        <h2>Filtrer par labels</h2>
+        <p class="sous">Les événements doivent avoir tous les labels sélectionnés.</p>
+        <div class="filtre-labels" id="filtre-labels"></div>
+        <div class="filtre-resultats" id="filtre-resultats"></div>
+      </div>
+    </div>
     <div class="compte" id="zone-compte" hidden></div>
   </header>
 
