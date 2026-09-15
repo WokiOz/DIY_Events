@@ -446,18 +446,22 @@ async function viewTab(id) {
         <button class="btn" data-action="theme-ajouter" data-id="${id}">+ Nouveau thème</button>
       </div>` : ''}
     </div>
-    <div class="grille">${themes.map(carteTheme).join('')}</div>
+    <div class="grille" id="grille-themes">${themes.map(carteTheme).join('')}</div>
     ${themes.length ? '' : vide('Aucun thème pour l’instant.')}`;
   appliquerModeLecture();
+  activerReorganisation(document.getElementById('grille-themes'), 'themes', 'x');
 }
 
 const carteTheme = theme => `
-  <a class="carte" href="#/theme/${theme.id}">
+  <a class="carte" href="#/theme/${theme.id}" data-id="${theme.id}">
     <div class="visuel">${theme.image_url ? `<img src="${esc(theme.image_url)}" alt=""${theme.image_focus ? ` style="object-position:${esc(theme.image_focus)}"` : ''}>` : '✦'}</div>
     <div class="corps">
-      <h3>${esc(theme.name)}</h3>
-      ${theme.description ? `<p>${esc(theme.description)}</p>` : ''}
-      <p class="compte">${theme.event_count} événement${theme.event_count > 1 ? 's' : ''}</p>
+      <div class="texte">
+        <h3>${esc(theme.name)}</h3>
+        ${theme.description ? `<p>${esc(theme.description)}</p>` : ''}
+        <p class="compte">${theme.event_count} événement${theme.event_count > 1 ? 's' : ''}</p>
+      </div>
+      ${estAdmin() ? '<span class="poignee" title="Glisser pour réordonner">⠿</span>' : ''}
     </div>
   </a>`;
 
@@ -482,9 +486,10 @@ async function viewTheme(id) {
         <button class="btn" data-action="event-ajouter" data-id="${theme.id}">+ Nouvel événement</button>
       </div>` : ''}
     </div>
-    <div class="grille">${theme.events.map(carteEvent).join('')}</div>
+    <div class="grille" id="grille-events">${theme.events.map(carteEvent).join('')}</div>
     ${theme.events.length ? '' : vide('Aucun événement dans ce thème.')}`;
   appliquerModeLecture();
+  activerReorganisation(document.getElementById('grille-events'), 'events', 'x');
 }
 
 function carteEvent(evenement) {
@@ -493,15 +498,18 @@ function carteEvent(evenement) {
   const infos = [dateFr(evenement.event_date), evenement.location, evenement.guests ? `${evenement.guests} invités` : '']
     .filter(Boolean).join(' · ');
   return `
-    <a class="carte" href="#/event/${evenement.id}">
+    <a class="carte" href="#/event/${evenement.id}" data-id="${evenement.id}">
       <div class="visuel">${evenement.image_url ? `<img src="${esc(evenement.image_url)}" alt=""${evenement.image_focus ? ` style="object-position:${esc(evenement.image_focus)}"` : ''}>` : '✦'}</div>
       <div class="corps">
-        <h3>${esc(evenement.name)}</h3>
-        ${infos ? `<p>${esc(infos)}</p>` : ''}
-        ${budget ? `<p class="${depense > budget ? 'depasse' : 'compte'}">${argent(depense)} sur ${argent(budget)}</p>` : ''}
-        ${evenement.labels?.length ? `<div class="labels-rangee">
-          ${evenement.labels.map(l => `<span class="label-chip">${esc(l)}</span>`).join('')}
-        </div>` : ''}
+        <div class="texte">
+          <h3>${esc(evenement.name)}</h3>
+          ${infos ? `<p>${esc(infos)}</p>` : ''}
+          ${budget ? `<p class="${depense > budget ? 'depasse' : 'compte'}">${argent(depense)} sur ${argent(budget)}</p>` : ''}
+          ${evenement.labels?.length ? `<div class="labels-rangee">
+            ${evenement.labels.map(l => `<span class="label-chip">${esc(l)}</span>`).join('')}
+          </div>` : ''}
+        </div>
+        ${estAdmin() ? '<span class="poignee" title="Glisser pour réordonner">⠿</span>' : ''}
       </div>
     </a>`;
 }
@@ -858,6 +866,7 @@ async function viewEvent(id) {
   majBudget();
   appliquerModeLecture();
   chargerApercusRenvoi();
+  activerReorganisation(document.getElementById('blocs'), 'blocks', 'y');
 }
 
 /* -------------------------------------------------------------- dépenses */
@@ -912,6 +921,7 @@ function renderBlock(bloc) {
                value="${esc(bloc.title || '')}" placeholder="${esc(def.label)}">
         <button class="icone" data-action="extra-ajouter" data-id="${bloc.id}">+ Champ</button>
         <button class="icone danger" data-action="bloc-supprimer" data-id="${bloc.id}" title="Supprimer">✕</button>
+        ${estAdmin() ? '<span class="poignee" title="Glisser pour réordonner">⠿</span>' : ''}
       </header>
       ${def.fields.map(champ => renderBlockField(bloc, champ)).join('')}
       ${extras.map((extra, index) => `
@@ -1028,6 +1038,50 @@ function sauverBloc(id) {
 }
 
 const signaler = erreur => alert(erreur.message || 'Une erreur est survenue.');
+
+// glisser une carte ou un bloc par sa poignée (⠿) pour réordonner ; fonctionne
+// au doigt comme à la souris (Pointer Events). axe: 'x' pour une grille de
+// cartes, 'y' pour une liste verticale (les blocs d'un événement).
+function activerReorganisation(conteneur, table, axe) {
+  if (!conteneur || !estAdmin()) return;
+  let element = null;
+
+  function survole(e) {
+    const cible = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-id]');
+    if (!cible || cible === element || cible.parentElement !== conteneur) return;
+    const rect = cible.getBoundingClientRect();
+    const avant = axe === 'x'
+      ? (e.clientX - rect.left) / rect.width < 0.5
+      : (e.clientY - rect.top) / rect.height < 0.5;
+    conteneur.insertBefore(element, avant ? cible : cible.nextSibling);
+  }
+
+  function relacher() {
+    window.removeEventListener('pointermove', survole);
+    if (element) {
+      element.classList.remove('en-glissement');
+      const ids = [...conteneur.children].map(el => el.dataset.id);
+      post('/api/reorder', { table, ids }).catch(signaler);
+    }
+    element = null;
+  }
+
+  conteneur.addEventListener('pointerdown', e => {
+    const poignee = e.target.closest('.poignee');
+    if (!poignee) return;
+    e.preventDefault();
+    element = poignee.closest('[data-id]');
+    if (!element) return;
+    element.classList.add('en-glissement');
+    window.addEventListener('pointermove', survole);
+    window.addEventListener('pointerup', relacher, { once: true });
+  });
+
+  // évite que relâcher la poignée déclenche la navigation de la carte (<a>)
+  conteneur.addEventListener('click', e => {
+    if (e.target.closest('.poignee')) e.preventDefault();
+  });
+}
 
 // une photo qui échoue à charger (fichier supprimé du serveur, coupure réseau…)
 // reste sinon vide indéfiniment ; on la remplace par un repère visible plutôt
