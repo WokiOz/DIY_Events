@@ -285,9 +285,31 @@ main {
   font-size: 26px;
 }
 .carte .visuel img { width: 100%; height: 100%; object-fit: cover; }
-.carte .corps { padding: 12px 14px 14px; }
+.carte .corps { padding: 12px 14px 14px; display: flex; align-items: flex-start; gap: 8px; }
+.carte .corps .texte { flex: 1; min-width: 0; }
 .carte .corps p { margin: 4px 0 0; color: var(--ink-soft); font-size: 14px; }
 .carte .compte { color: var(--gold); font-size: 13px; font-weight: 500; }
+
+.poignee {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.poignee:hover { background: var(--surface); color: var(--ink); }
+.poignee:active { cursor: grabbing; }
+.carte .poignee { margin-top: -2px; }
+
+.carte.en-glissement, .block.en-glissement { opacity: .4; }
 
 .depasse { color: var(--alert); font-weight: 500; }
 
