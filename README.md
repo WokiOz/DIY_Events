@@ -24,7 +24,7 @@ Réglages à faire une fois :
 
 1. Sur GitHub, dans **Settings → Actions → General → Workflow permissions**, cocher **Read and write permissions** : le workflow doit pouvoir committer la mise à jour de `docker-compose.yml`.
 2. Après le premier passage du workflow, dans **Packages** (github.com/WokiOz/DIY_Events), passer le package `diy_events-app` en **public** (le dépôt est public mais un package publié par un workflow est privé par défaut) — sinon Portainer doit avoir des identifiants ghcr.io configurés dans **Registries**.
-3. **Environment variables** de la stack — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT`, `SESSION_SECRET` (une valeur longue et aléatoire, ex. `openssl rand -hex 32` — quiconque la connaît peut fabriquer un cookie de connexion valide).
+3. **Environment variables** de la stack — puisque `.env` n'est pas versionné, ajoutez-y `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `APP_PORT` et, facultatif, `SESSION_SECRET` (une valeur longue et aléatoire, ex. `openssl rand -hex 32` — quiconque la connaît peut fabriquer un cookie de connexion valide ; sans elle, une clé aléatoire est générée et conservée en base).
 4. **GitOps updates** → Mechanism **Polling**, intervalle 5 minutes. Suffisant pour un usage familial et n'exige aucun port ouvert sur la box. Le mode Webhook existe mais demande que Portainer soit joignable depuis Internet — à éviter sans solution comme Tailscale devant.
 
 Ensuite, déployer une modification du serveur se résume à `git push` sur `main` : le workflow construit et publie l'image, committe le nouveau tag, et au poll suivant Portainer tire cette image.

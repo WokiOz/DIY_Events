@@ -63,7 +63,12 @@ check "ajout d'une dépense" "250" "$(cget "$BASE/api/events/$EVENT_ID" | json "
 check "recherche" "Evenement ZZTEST" "$(cget "$BASE/api/search?q=ZZTEST" | json "[0]['name']")"
 
 echo test > /tmp/smoke-test-fichier.txt
-check "envoi de fichier" "smoke-test-fichier.txt" "$(curl -s -b "$COOKIES" -F file=@/tmp/smoke-test-fichier.txt "$BASE/api/upload" | json "['name']")"
+ENVOI=$(curl -s -b "$COOKIES" -F file=@/tmp/smoke-test-fichier.txt "$BASE/api/upload")
+check "envoi de fichier" "smoke-test-fichier.txt" "$(echo "$ENVOI" | json "['name']")"
+URL_FICHIER=$(echo "$ENVOI" | json "['url']")
+check "fichier envoyé invisible sans connexion" "401" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE$URL_FICHIER")"
+check "fichier non-image servi en téléchargement" "attachment" \
+  "$(curl -s -o /dev/null -D - -b "$COOKIES" "$BASE$URL_FICHIER" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Dd]isposition: //p')"
 rm -f /tmp/smoke-test-fichier.txt
 
 NOM_COMPTE="zztest$$"

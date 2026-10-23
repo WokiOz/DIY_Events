@@ -1,8 +1,28 @@
 import crypto from 'node:crypto';
 import { pool } from './db.js';
 
-const SECRET = process.env.SESSION_SECRET || 'changez-cette-cle-en-production';
+const CLE_PAR_DEFAUT = 'changez-cette-cle-en-production';
 const DUREE_SESSION_MS = 180 * 24 * 60 * 60 * 1000; // 180 jours
+
+let SECRET = null;
+
+// Sans SESSION_SECRET (ou avec l'ancienne valeur par défaut, publique dans le
+// dépôt), n'importe qui pourrait fabriquer un cookie admin valide. On génère
+// alors une clé aléatoire, conservée en base pour survivre aux redémarrages.
+export async function initialiserSecret() {
+  const env = process.env.SESSION_SECRET;
+  if (env && env !== CLE_PAR_DEFAUT) {
+    SECRET = env;
+    return;
+  }
+  await pool.query(
+    `INSERT INTO parametres (cle, valeur) VALUES ('session_secret', $1) ON CONFLICT (cle) DO NOTHING`,
+    [crypto.randomBytes(32).toString('hex')]
+  );
+  const { rows } = await pool.query(`SELECT valeur FROM parametres WHERE cle = 'session_secret'`);
+  SECRET = rows[0].valeur;
+  console.log('SESSION_SECRET absent : clé de session aléatoire conservée en base.');
+}
 
 function signer(valeur) {
   const signature = crypto.createHmac('sha256', SECRET).update(valeur).digest('base64url');
@@ -24,7 +44,10 @@ function lireCookies(req) {
   if (!entete) return {};
   return Object.fromEntries(entete.split(';').map(morceau => {
     const i = morceau.indexOf('=');
-    return [morceau.slice(0, i).trim(), decodeURIComponent(morceau.slice(i + 1))];
+    const brut = morceau.slice(i + 1);
+    let valeur;
+    try { valeur = decodeURIComponent(brut); } catch { valeur = brut; }
+    return [morceau.slice(0, i).trim(), valeur];
   }));
 }
 
@@ -36,14 +59,20 @@ function lireJeton(valeurCookie) {
   return { id: Number(id), version: Number(version) };
 }
 
+// « Secure » seulement en HTTPS, pour ne pas casser l'usage local en http
+const attributsCookie = res => {
+  const https = res.req?.secure || res.req?.headers['x-forwarded-proto'] === 'https';
+  return `HttpOnly; Path=/; SameSite=Lax${https ? '; Secure' : ''}`;
+};
+
 export function definirCookieSession(res, utilisateur) {
   const expiration = Date.now() + DUREE_SESSION_MS;
   const jeton = signer(`${utilisateur.id}:${utilisateur.token_version}:${expiration}`);
-  res.setHeader('Set-Cookie', `session=${jeton}; HttpOnly; Path=/; Max-Age=${Math.floor(DUREE_SESSION_MS / 1000)}; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `session=${jeton}; Max-Age=${Math.floor(DUREE_SESSION_MS / 1000)}; ${attributsCookie(res)}`);
 }
 
 export function effacerCookieSession(res) {
-  res.setHeader('Set-Cookie', 'session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  res.setHeader('Set-Cookie', `session=; Max-Age=0; ${attributsCookie(res)}`);
 }
 
 export async function authentifier(req, res, next) {
@@ -70,3 +99,40 @@ export function exigerAdmin(req, res, next) {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Réservé aux administrateurs' });
   next();
 }
+
+/* ------------------------------------------- tentatives de connexion */
+
+// Sans limite, un mot de passe court se devine par essais successifs.
+// Compté par identifiant (derrière un proxy, l'IP vue est celle du proxy).
+const ESSAIS_MAX = 10;
+const FENETRE_MS = 15 * 60 * 1000;
+const SUIVI_MAX = 10000;
+const tentatives = new Map();
+
+export function connexionBloquee(nom) {
+  const suivi = tentatives.get(nom);
+  if (!suivi || suivi.bloqueJusqua <= Date.now()) return 0;
+  return Math.ceil((suivi.bloqueJusqua - Date.now()) / 60000);
+}
+
+export function noterEchecConnexion(nom) {
+  const maintenant = Date.now();
+  let suivi = tentatives.get(nom);
+  if (!suivi || maintenant - suivi.debut > FENETRE_MS) suivi = { echecs: 0, debut: maintenant, bloqueJusqua: 0 };
+  suivi.echecs++;
+  if (suivi.echecs >= ESSAIS_MAX) suivi.bloqueJusqua = maintenant + FENETRE_MS;
+  tentatives.delete(nom);
+  tentatives.set(nom, suivi);
+  while (tentatives.size > SUIVI_MAX) tentatives.delete(tentatives.keys().next().value);
+}
+
+export function oublierEchecsConnexion(nom) {
+  tentatives.delete(nom);
+}
+
+setInterval(() => {
+  const maintenant = Date.now();
+  for (const [nom, suivi] of tentatives) {
+    if (maintenant - suivi.debut > FENETRE_MS && suivi.bloqueJusqua <= maintenant) tentatives.delete(nom);
+  }
+}, FENETRE_MS).unref();

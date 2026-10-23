@@ -1,10 +1,14 @@
 import express from 'express';
 import multer from 'multer';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool, initDatabase } from './db.js';
-import { authentifier, exigerAdmin, definirCookieSession, effacerCookieSession } from './auth.js';
+import {
+  authentifier, exigerAdmin, definirCookieSession, effacerCookieSession, initialiserSecret,
+  connexionBloquee, noterEchecConnexion, oublierEchecsConnexion
+} from './auth.js';
 import { hacherMotDePasse, verifierMotDePasse } from './mots-de-passe.js';
 
 const racine = path.dirname(fileURLToPath(import.meta.url));
@@ -12,16 +16,47 @@ const dossierPublic = path.join(racine, '..', 'public');
 const dossierUploads = path.join(racine, '..', 'uploads');
 fs.mkdirSync(dossierUploads, { recursive: true });
 
+const MOT_DE_PASSE_MIN = 8;
+// seules ces images s'affichent dans le navigateur ; tout le reste (html, svg,
+// pdf…) est téléchargé, pour qu'un fichier piégé ne s'exécute pas sur le site
+const IMAGES_AFFICHABLES = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.heic', '.heif', '.bmp']);
+
 const app = express();
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; '));
+  next();
+});
 app.use(express.json({ limit: '5mb' }));
-app.use('/uploads', express.static(dossierUploads, { maxAge: '7d' }));
+// les fichiers envoyés (photos de famille, devis…) ne sont visibles qu'une fois connecté
+app.use('/uploads', authentifier, express.static(dossierUploads, {
+  setHeaders: (res, chemin) => {
+    res.setHeader('Cache-Control', 'private, max-age=604800');
+    if (!IMAGES_AFFICHABLES.has(path.extname(chemin).toLowerCase())) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  }
+}));
 app.use(express.static(dossierPublic));
 
 const stockage = multer.diskStorage({
   destination: (req, fichier, suite) => suite(null, dossierUploads),
   filename: (req, fichier, suite) => {
     const extension = path.extname(fichier.originalname).slice(0, 12).replace(/[^\w.]/g, '');
-    suite(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`);
+    suite(null, `${Date.now()}-${crypto.randomBytes(9).toString('base64url')}${extension}`);
   }
 });
 const envoi = multer({ storage: stockage, limits: { fileSize: 50 * 1024 * 1024 } });
@@ -71,14 +106,25 @@ const estAdmin = req => req.user.role === 'admin';
 
 /* -------------------------------------------------------------- connexion */
 
+// haché factice : un identifiant inconnu prend le même temps qu'un vrai,
+// pour ne pas révéler quels comptes existent
+const HACHE_FACTICE = hacherMotDePasse(crypto.randomBytes(16).toString('hex'));
+
 app.post('/api/login', a(async (req, res) => {
-  const nom = (req.body.username || '').trim().toLowerCase();
-  const motDePasse = req.body.password || '';
+  const nom = String(req.body.username || '').trim().toLowerCase();
+  const motDePasse = String(req.body.password || '');
+  const minutes = connexionBloquee(nom);
+  if (minutes) {
+    return res.status(429).json({ error: `Trop de tentatives, réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.` });
+  }
   const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [nom]);
   const utilisateur = rows[0];
-  if (!utilisateur || !utilisateur.active || !verifierMotDePasse(motDePasse, utilisateur.password_hash)) {
+  const valide = verifierMotDePasse(motDePasse, utilisateur?.password_hash || HACHE_FACTICE);
+  if (!utilisateur || !utilisateur.active || !valide) {
+    noterEchecConnexion(nom);
     return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
   }
+  oublierEchecsConnexion(nom);
   definirCookieSession(res, utilisateur);
   res.json({
     id: utilisateur.id, username: utilisateur.username,
@@ -101,8 +147,10 @@ app.get('/api/me', (req, res) => {
 });
 
 app.post('/api/password', a(async (req, res) => {
-  const motDePasse = req.body.password || '';
-  if (motDePasse.length < 4) return res.status(400).json({ error: 'Le mot de passe doit faire au moins 4 caractères' });
+  const motDePasse = String(req.body.password || '');
+  if (motDePasse.length < MOT_DE_PASSE_MIN) {
+    return res.status(400).json({ error: `Le mot de passe doit faire au moins ${MOT_DE_PASSE_MIN} caractères` });
+  }
   const nouvelleVersion = req.user.token_version + 1;
   await pool.query(
     'UPDATE users SET password_hash = $1, must_change_password = false, token_version = $2 WHERE id = $3',
@@ -121,9 +169,11 @@ app.get('/api/users', exigerAdmin, a(async (req, res) => {
 
 app.post('/api/users', exigerAdmin, a(async (req, res) => {
   const nom = (req.body.username || '').trim().toLowerCase();
-  const motDePasse = req.body.password || '';
+  const motDePasse = String(req.body.password || '');
   if (!nom) return res.status(400).json({ error: 'Le nom d’utilisateur est obligatoire' });
-  if (motDePasse.length < 4) return res.status(400).json({ error: 'Le mot de passe doit faire au moins 4 caractères' });
+  if (motDePasse.length < MOT_DE_PASSE_MIN) {
+    return res.status(400).json({ error: `Le mot de passe doit faire au moins ${MOT_DE_PASSE_MIN} caractères` });
+  }
   try {
     const { rows } = await pool.query(
       `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'lecture') RETURNING ${COLONNES_UTILISATEUR}`,
@@ -458,6 +508,7 @@ app.use((erreur, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 initDatabase()
+  .then(initialiserSecret)
   .then(() => app.listen(port, () => console.log(`Prêt sur le port ${port}`)))
   .catch(erreur => {
     console.error('Impossible de préparer la base :', erreur);

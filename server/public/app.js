@@ -533,7 +533,7 @@ async function viewComptes() {
           <label for="nc-mdp">Mot de passe</label>
           <button type="button" class="icone" data-action="compte-mdp-aleatoire">Aléatoire</button>
         </div>
-        <input id="nc-mdp" name="password" type="password" required minlength="4">
+        <input id="nc-mdp" name="password" type="password" required minlength="8">
       </div>
       <button class="btn" type="submit">+ Créer un compte lecture seule</button>
     </form>
