@@ -74,6 +74,11 @@ CREATE TABLE IF NOT EXISTS permissions (
   PRIMARY KEY (user_id, event_id)
 );
 
+CREATE TABLE IF NOT EXISTS parametres (
+  cle TEXT PRIMARY KEY,
+  valeur TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS themes_tab_id_idx ON themes(tab_id);
 CREATE INDEX IF NOT EXISTS events_theme_id_idx ON events(theme_id);
 CREATE INDEX IF NOT EXISTS blocks_event_id_idx ON blocks(event_id);
